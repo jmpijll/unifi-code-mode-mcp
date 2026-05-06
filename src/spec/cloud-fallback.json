@@ -1,0 +1,163 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "UniFi Site Manager API (curated fallback)",
+    "version": "fallback-1",
+    "description": "Curated minimal schema for the documented endpoints of the Site Manager (cloud) API at https://api.ui.com. Used when Ubiquiti has not published a machine-readable OpenAPI document. Source: https://developer.ui.com/site-manager-api/."
+  },
+  "servers": [
+    {
+      "url": "https://api.ui.com"
+    }
+  ],
+  "tags": [
+    { "name": "Hosts", "description": "UniFi Consoles linked to your account" },
+    { "name": "Sites", "description": "Sites across all your hosts" },
+    { "name": "Devices", "description": "Adopted devices across hosts" },
+    { "name": "ISP Metrics", "description": "ISP metrics for sites" },
+    { "name": "SD-WAN", "description": "SD-WAN configurations and status" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  },
+  "security": [{ "ApiKeyAuth": [] }],
+  "paths": {
+    "/v1/hosts": {
+      "get": {
+        "operationId": "listHosts",
+        "tags": ["Hosts"],
+        "summary": "List UniFi hosts (consoles) accessible to this API key",
+        "parameters": [
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer" } },
+          { "name": "nextToken", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/hosts/{hostId}": {
+      "get": {
+        "operationId": "getHost",
+        "tags": ["Hosts"],
+        "summary": "Get a single host by id",
+        "parameters": [
+          { "name": "hostId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites": {
+      "get": {
+        "operationId": "listSites",
+        "tags": ["Sites"],
+        "summary": "List sites across all linked hosts",
+        "parameters": [
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer" } },
+          { "name": "nextToken", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/devices": {
+      "get": {
+        "operationId": "listDevices",
+        "tags": ["Devices"],
+        "summary": "List adopted devices across all linked hosts",
+        "parameters": [
+          { "name": "hostIds", "in": "query", "description": "Comma-separated host ids to filter by", "schema": { "type": "string" } },
+          { "name": "time", "in": "query", "description": "Snapshot timestamp (ISO 8601)", "schema": { "type": "string" } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer" } },
+          { "name": "nextToken", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites/{siteId}/isp-metrics/{type}": {
+      "get": {
+        "operationId": "getIspMetrics",
+        "tags": ["ISP Metrics"],
+        "summary": "Get ISP metrics for a site over a time range",
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "enum": ["5m", "1h"] }
+          },
+          { "name": "beginTimestamp", "in": "query", "schema": { "type": "string" } },
+          { "name": "endTimestamp", "in": "query", "schema": { "type": "string" } },
+          { "name": "duration", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites/{siteId}/isp-metrics/{type}/query": {
+      "post": {
+        "operationId": "queryIspMetrics",
+        "tags": ["ISP Metrics"],
+        "summary": "Query ISP metrics for a site with structured filters",
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "enum": ["5m", "1h"] }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "beginTimestamp": { "type": "string" },
+                  "endTimestamp": { "type": "string" },
+                  "duration": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sd-wan-configs": {
+      "get": {
+        "operationId": "listSdWanConfigs",
+        "tags": ["SD-WAN"],
+        "summary": "List SD-WAN configurations",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sd-wan-configs/{configId}": {
+      "get": {
+        "operationId": "getSdWanConfig",
+        "tags": ["SD-WAN"],
+        "summary": "Get an SD-WAN configuration by id",
+        "parameters": [
+          { "name": "configId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sd-wan-configs/{configId}/status": {
+      "get": {
+        "operationId": "getSdWanConfigStatus",
+        "tags": ["SD-WAN"],
+        "summary": "Get the deployment status of an SD-WAN configuration",
+        "parameters": [
+          { "name": "configId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}

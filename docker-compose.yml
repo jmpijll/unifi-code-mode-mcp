@@ -1,0 +1,23 @@
+services:
+  unifi-mcp:
+    build: .
+    image: unifi-code-mode-mcp:latest
+    container_name: unifi-code-mode-mcp
+    restart: unless-stopped
+    ports:
+      - '8000:8000'
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HTTP_PORT: '8000'
+      # In multi-tenant deployments, leave the credential vars unset and let
+      # the MCP client send them as X-Unifi-* headers per request.
+      UNIFI_LOCAL_BASE_URL: ${UNIFI_LOCAL_BASE_URL:-}
+      UNIFI_LOCAL_API_KEY: ${UNIFI_LOCAL_API_KEY:-}
+      UNIFI_LOCAL_INSECURE: ${UNIFI_LOCAL_INSECURE:-false}
+      UNIFI_CLOUD_API_KEY: ${UNIFI_CLOUD_API_KEY:-}
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8000/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

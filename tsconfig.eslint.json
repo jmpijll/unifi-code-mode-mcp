@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "cf-worker/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
