@@ -58,7 +58,11 @@ class RateLimiter {
       timestamps = [];
       this.windows.set(ip, timestamps);
     }
-    while (timestamps.length > 0 && timestamps[0]! < cutoff) timestamps.shift();
+    while (timestamps.length > 0) {
+      const head = timestamps[0];
+      if (head === undefined || head >= cutoff) break;
+      timestamps.shift();
+    }
     if (timestamps.length >= this.maxRequests) return false;
     timestamps.push(now);
     return true;
@@ -67,7 +71,11 @@ class RateLimiter {
   cleanup(): void {
     const cutoff = Date.now() - this.windowMs;
     for (const [ip, ts] of this.windows) {
-      while (ts.length > 0 && ts[0]! < cutoff) ts.shift();
+      while (ts.length > 0) {
+        const head = ts[0];
+        if (head === undefined || head >= cutoff) break;
+        ts.shift();
+      }
       if (ts.length === 0) this.windows.delete(ip);
     }
   }
@@ -101,7 +109,7 @@ export async function startHttpTransport(
   };
 
   const rateLimiter = new RateLimiter(60_000, config.rateLimitPerMinute ?? 60);
-  const cleanupInterval = setInterval(() => rateLimiter.cleanup(), 300_000);
+  const cleanupInterval = setInterval(() => { rateLimiter.cleanup(); }, 300_000);
   cleanupInterval.unref();
 
   await server.connect(transport);
@@ -187,10 +195,9 @@ async function handleRequest(
     stats.mcpRequests++;
     logger.info(`MCP ${req.method ?? 'UNKNOWN'} from ${clientIp}`);
 
-    await requestStore.run(
-      { headers: req.headers, clientIp },
-      async () => transport.handleRequest(req, res),
-    );
+    await requestStore.run({ headers: req.headers, clientIp }, async () => {
+      await transport.handleRequest(req, res);
+    });
     logger.info(`MCP ${req.method ?? 'UNKNOWN'} completed in ${String(Date.now() - startTime)}ms`);
   } catch (err) {
     stats.errors++;

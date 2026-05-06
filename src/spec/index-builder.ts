@@ -23,9 +23,9 @@ export function buildOperationIndex(spec: OpenApiDocument): IndexedOperation[] {
   const operations: IndexedOperation[] = [];
 
   for (const [path, item] of Object.entries(spec.paths)) {
-    if (!item || typeof item !== 'object') continue;
+    if (typeof item !== 'object') continue;
     const pathItem = item;
-    const pathLevelParams = (pathItem.parameters ?? []) as ParameterObject[];
+    const pathLevelParams = pathItem.parameters ?? [];
 
     for (const method of HTTP_METHODS) {
       const op = pathItem[method];
@@ -61,7 +61,7 @@ function buildOperation(
 
   const allParams: ParameterObject[] = [
     ...pathLevelParams,
-    ...((op.parameters ?? []) as ParameterObject[]),
+    ...(op.parameters ?? []),
   ];
 
   const parameters = allParams.map((p) => ({
@@ -103,8 +103,9 @@ export function normalizeTag(tag: string): string {
   const parts = cleaned.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return 'default';
   const [first, ...rest] = parts;
+  if (first === undefined) return 'default';
   return [
-    first!.toLowerCase(),
+    first.toLowerCase(),
     ...rest.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()),
   ].join('');
 }

@@ -139,8 +139,8 @@ describe('summarizeOperation', () => {
 
   it('produces compact serializable output', () => {
     const op = findOperation(spec, 'listSites');
-    expect(op).toBeDefined();
-    const summary = summarizeOperation(op!);
+    if (!op) throw new Error('expected listSites to be findable in mock spec');
+    const summary = summarizeOperation(op);
     expect(summary['operationId']).toBe('listSites');
     expect(summary['method']).toBe('GET');
     expect(summary['path']).toBe('/v1/sites');

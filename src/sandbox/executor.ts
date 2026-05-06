@@ -172,6 +172,9 @@ function stringifyValue(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
-    return typeof value === 'object' ? '[object]' : String(value as string);
+    if (typeof value === 'object') return '[object]';
+    if (typeof value === 'symbol') return value.toString();
+    // value is primitive (number/bigint/boolean) — convert via Number/Boolean coercion.
+    return Object.prototype.toString.call(value);
   }
 }

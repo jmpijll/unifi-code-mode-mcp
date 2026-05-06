@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildQueryString, substitutePathParams } from '../client/http.js';
+import {
+  createCloudClient,
+  createCloudNetworkProxyClient,
+  createLocalClient,
+} from '../client/index.js';
 
 describe('substitutePathParams', () => {
   it('replaces placeholders', () => {
@@ -33,5 +38,45 @@ describe('buildQueryString', () => {
   it('returns empty string for empty input', () => {
     expect(buildQueryString({})).toBe('');
     expect(buildQueryString(undefined)).toBe('');
+  });
+});
+
+describe('client factories', () => {
+  it('createLocalClient prefixes /proxy/network/integration', () => {
+    const client = createLocalClient({ baseUrl: 'https://192.0.2.1', apiKey: 'k' });
+    expect(client.config.pathPrefix).toBe('/proxy/network/integration');
+    expect(client.config.baseUrl).toBe('https://192.0.2.1');
+  });
+
+  it('createCloudClient has no path prefix', () => {
+    const client = createCloudClient({ baseUrl: 'https://api.ui.com', apiKey: 'k' });
+    expect(client.config.pathPrefix).toBe('');
+  });
+
+  it('createCloudNetworkProxyClient prefixes the connector path with consoleId', () => {
+    const client = createCloudNetworkProxyClient(
+      { baseUrl: 'https://api.ui.com', apiKey: 'k' },
+      'console-abc',
+    );
+    expect(client.config.baseUrl).toBe('https://api.ui.com');
+    expect(client.config.pathPrefix).toBe(
+      '/v1/connector/consoles/console-abc/proxy/network/integration',
+    );
+  });
+
+  it('createCloudNetworkProxyClient URL-encodes the consoleId', () => {
+    const client = createCloudNetworkProxyClient(
+      { baseUrl: 'https://api.ui.com', apiKey: 'k' },
+      'console with spaces/and-slash',
+    );
+    expect(client.config.pathPrefix).toBe(
+      '/v1/connector/consoles/console%20with%20spaces%2Fand-slash/proxy/network/integration',
+    );
+  });
+
+  it('createCloudNetworkProxyClient rejects empty consoleId', () => {
+    expect(() =>
+      createCloudNetworkProxyClient({ baseUrl: 'https://api.ui.com', apiKey: 'k' }, ''),
+    ).toThrow(/consoleId/);
   });
 });
