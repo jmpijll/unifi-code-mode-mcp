@@ -53,7 +53,7 @@ export async function dispatchRawRequest(
   client: HttpClient,
   args: UnifiRequestParams,
 ): Promise<UnifiResponse> {
-  if (!args || typeof args !== 'object' || typeof args.path !== 'string') {
+  if (typeof args !== 'object' || typeof args.path !== 'string') {
     throw new Error(
       'request() argument must be an object with at least a string `path` field. ' +
         'Example: unifi.local.request({ method: "GET", path: "/v1/sites" })',
@@ -88,6 +88,8 @@ function routeArgsToRequest(op: IndexedOperation, args: DispatchOperationArgs): 
     if (param.in !== 'path' && param.in !== 'query') continue;
     if (!(param.name in remaining)) continue;
     const value = remaining[param.name];
+    // Remove this key from `remaining` so it isn't pushed into the request body.
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete remaining[param.name];
     if (value === undefined) continue;
     if (param.in === 'path') {
@@ -125,16 +127,32 @@ function routeArgsToRequest(op: IndexedOperation, args: DispatchOperationArgs): 
  * Build a JS prelude that creates the `unifi` namespace at sandbox init time.
  *
  * Output shape:
- *   unifi.local.<tag>.<operationId>(args) -> Promise
+ *   unifi.local.<tag>.<operationId>(args) -> Promise          // direct to controller
  *   unifi.local.callOperation(operationId, args) -> Promise
  *   unifi.local.request({ method, path, ... }) -> Promise
  *   unifi.local.spec -> { title, version, sourceUrl }
- *   (same for unifi.cloud if a cloud spec was provided)
+ *
+ *   unifi.cloud.<tag>.<operationId>(args) -> Promise          // Site Manager native
+ *   unifi.cloud.callOperation(operationId, args) -> Promise
+ *   unifi.cloud.request({ method, path, ... }) -> Promise
+ *   unifi.cloud.spec -> { title, version, sourceUrl }
+ *
+ *   unifi.cloud.network(consoleId) -> {                       // Network Integration via cloud proxy
+ *     <tag>.<operationId>(args) -> Promise,
+ *     callOperation, request, spec, consoleId
+ *   }
+ *   unifi.cloud.consoles -> [list of known console ids, if any]
  *
  * The functions delegate to host-side bindings injected separately:
- *   __unifiCallLocal, __unifiRawLocal, __unifiCallCloud, __unifiRawCloud
+ *   __unifiCallLocal, __unifiRawLocal,
+ *   __unifiCallCloud, __unifiRawCloud,
+ *   __unifiCallCloudNetwork, __unifiRawCloudNetwork
  */
-export function buildUnifiPrelude(localSpec?: ProcessedSpec, cloudSpec?: ProcessedSpec): string {
+export function buildUnifiPrelude(
+  localSpec?: ProcessedSpec,
+  cloudSpec?: ProcessedSpec,
+  options: { exposeCloudNetworkProxy?: boolean } = {},
+): string {
   const lines: string[] = [];
   lines.push('var unifi = {};');
 
@@ -148,6 +166,12 @@ export function buildUnifiPrelude(localSpec?: ProcessedSpec, cloudSpec?: Process
     lines.push(buildNamespacePrelude('cloud', cloudSpec));
   } else {
     lines.push(missingNamespacePrelude('cloud'));
+  }
+
+  // Cloud → Network proxy attaches to unifi.cloud and reuses the local Network spec.
+  // We only attach it when a local spec is available; the cloud key is checked at call time.
+  if (options.exposeCloudNetworkProxy && localSpec) {
+    lines.push(buildCloudNetworkProxyPrelude(localSpec));
   }
 
   return lines.join('\n');
@@ -193,6 +217,76 @@ function buildNamespacePrelude(namespace: 'local' | 'cloud', spec: ProcessedSpec
   namespaceObj.push(`})();`);
 
   return namespaceObj.join('\n');
+}
+
+/**
+ * Cloud→Network proxy: emits a `unifi.cloud.network(consoleId)` factory
+ * that returns a per-console object identical in shape to `unifi.local`,
+ * but routed through the Site Manager connector via host bindings
+ * `__unifiCallCloudNetwork(consoleId, opId, argsJson)` and
+ * `__unifiRawCloudNetwork(consoleId, argsJson)`.
+ *
+ * The factory caches per-consoleId instances inside the sandbox so the
+ * LLM can keep a stable handle: `var net = unifi.cloud.network('abc'); net.sites.listSites()`.
+ */
+function buildCloudNetworkProxyPrelude(localSpec: ProcessedSpec): string {
+  const groups = new Map<string, IndexedOperation[]>();
+  for (const op of localSpec.operations) {
+    const key = op.primaryTag || 'default';
+    const arr = groups.get(key) ?? [];
+    arr.push(op);
+    groups.set(key, arr);
+  }
+
+  const operationFactoryLines: string[] = [];
+  operationFactoryLines.push('  function buildProxyForConsole(consoleId) {');
+  operationFactoryLines.push('    var ns = {');
+  operationFactoryLines.push(`      spec: ${JSON.stringify({
+    title: localSpec.title,
+    version: localSpec.version,
+    sourceUrl: localSpec.sourceUrl,
+    operationCount: localSpec.operations.length,
+  })},`);
+  operationFactoryLines.push('      consoleId: consoleId,');
+  operationFactoryLines.push(
+    '      request: function(args) { return __unifiRawCloudNetwork(consoleId, JSON.stringify(args || {})); },',
+  );
+  operationFactoryLines.push(
+    '      callOperation: function(opId, args) { return __unifiCallCloudNetwork(consoleId, opId, JSON.stringify(args || {})); }',
+  );
+  operationFactoryLines.push('    };');
+
+  for (const [tag, ops] of groups) {
+    const safeTag = sanitizeIdentifier(tag);
+    operationFactoryLines.push(`    ns.${safeTag} = {};`);
+    for (const op of ops) {
+      const methodName = sanitizeIdentifier(op.operationId);
+      operationFactoryLines.push(
+        `    ns.${safeTag}.${methodName} = function(args) { return __unifiCallCloudNetwork(consoleId, ${JSON.stringify(op.operationId)}, JSON.stringify(args || {})); };`,
+      );
+    }
+  }
+
+  operationFactoryLines.push('    return ns;');
+  operationFactoryLines.push('  }');
+
+  return [
+    '(function() {',
+    '  if (typeof unifi.cloud !== "object" || unifi.cloud === null || unifi.cloud.__missing) {',
+    '    return; // cloud namespace not available; nothing to attach',
+    '  }',
+    '  var cache = {};',
+    ...operationFactoryLines,
+    '  unifi.cloud.network = function(consoleId) {',
+    '    if (typeof consoleId !== "string" || consoleId.length === 0) {',
+    '      throw new Error("unifi.cloud.network(consoleId): consoleId must be a non-empty string. Find it in https://unifi.ui.com/consoles/<id>/.");',
+    '    }',
+    '    if (cache[consoleId]) return cache[consoleId];',
+    '    cache[consoleId] = buildProxyForConsole(consoleId);',
+    '    return cache[consoleId];',
+    '  };',
+    '})();',
+  ].join('\n');
 }
 
 function missingNamespacePrelude(namespace: 'local' | 'cloud'): string {

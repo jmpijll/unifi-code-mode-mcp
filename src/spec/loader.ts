@@ -236,7 +236,7 @@ async function fetchSpec(url: string): Promise<OpenApiDocument> {
     throw new Error(`Failed to fetch OpenAPI from ${url}: HTTP ${String(res.status)}`);
   }
   const body = (await res.json()) as OpenApiDocument;
-  if (!body || typeof body !== 'object' || !body.paths) {
+  if (typeof body !== 'object' || typeof body.paths !== 'object') {
     throw new Error(`Invalid OpenAPI document at ${url} — missing paths`);
   }
   return body;

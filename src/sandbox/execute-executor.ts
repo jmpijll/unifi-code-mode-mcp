@@ -21,7 +21,7 @@ import {
 } from 'quickjs-emscripten';
 import type { HttpClient } from '../client/http.js';
 import { createLocalClient } from '../client/local.js';
-import { createCloudClient } from '../client/cloud.js';
+import { createCloudClient, createCloudNetworkProxyClient } from '../client/cloud.js';
 import { UnifiHttpError } from '../client/types.js';
 import {
   buildUnifiPrelude,
@@ -42,14 +42,23 @@ import type { ProcessedSpec } from '../types/spec.js';
 export interface ExecuteExecutorOptions {
   /** Tenant credentials — sandboxed clients are built from these on demand. */
   tenant: TenantContext;
-  /** Local spec (mandatory for unifi.local.* methods to be defined). */
+  /** Local spec (mandatory for unifi.local.* and unifi.cloud.network() methods). */
   localSpec?: ProcessedSpec;
-  /** Cloud spec (mandatory for unifi.cloud.* methods to be defined). */
+  /** Cloud spec (mandatory for unifi.cloud.* native methods). */
   cloudSpec?: ProcessedSpec;
   /** Lazy local client factory — only invoked if the sandbox calls a local operation. */
   buildLocalClient?: (tenant: TenantContext, onWarn: (msg: string) => void) => HttpClient;
   /** Lazy cloud client factory — only invoked if the sandbox calls a cloud operation. */
   buildCloudClient?: (tenant: TenantContext, onWarn: (msg: string) => void) => HttpClient;
+  /**
+   * Lazy cloud-network-proxy client factory — only invoked if the sandbox
+   * calls a cloud-proxied Network operation. One client per consoleId.
+   */
+  buildCloudNetworkClient?: (
+    tenant: TenantContext,
+    consoleId: string,
+    onWarn: (msg: string) => void,
+  ) => HttpClient;
   /** Sandbox limits (timeout, memory, calls). */
   limits?: Partial<SandboxLimits>;
 }
@@ -61,6 +70,9 @@ export class ExecuteExecutor {
   private readonly limits: SandboxLimits;
   private readonly buildLocalClient: NonNullable<ExecuteExecutorOptions['buildLocalClient']>;
   private readonly buildCloudClient: NonNullable<ExecuteExecutorOptions['buildCloudClient']>;
+  private readonly buildCloudNetworkClient: NonNullable<
+    ExecuteExecutorOptions['buildCloudNetworkClient']
+  >;
 
   constructor(opts: ExecuteExecutorOptions) {
     this.tenant = opts.tenant;
@@ -69,6 +81,8 @@ export class ExecuteExecutor {
     this.limits = { ...DEFAULT_LIMITS, ...opts.limits };
     this.buildLocalClient = opts.buildLocalClient ?? defaultBuildLocalClient;
     this.buildCloudClient = opts.buildCloudClient ?? defaultBuildCloudClient;
+    this.buildCloudNetworkClient =
+      opts.buildCloudNetworkClient ?? defaultBuildCloudNetworkClient;
   }
 
   async execute(code: string): Promise<ExecuteResult> {
@@ -82,6 +96,7 @@ export class ExecuteExecutor {
 
     let localClient: HttpClient | undefined;
     let cloudClient: HttpClient | undefined;
+    const cloudNetworkClients = new Map<string, HttpClient>();
     const onWarn = (msg: string): void => {
       if (!warnings.includes(msg)) warnings.push(msg);
     };
@@ -127,8 +142,33 @@ export class ExecuteExecutor {
         callBudgetGuard,
       });
 
-      // Build and inject the unifi namespace prelude.
-      const prelude = buildUnifiPrelude(this.localSpec, this.cloudSpec);
+      // Cloud-proxied Network surface: re-uses the LOCAL Network spec for
+      // operation lookups but routes calls through the cloud key + the
+      // /v1/connector/consoles/{id}/proxy/network/integration prefix.
+      bindCloudNetworkProxyFunctions(context, {
+        getCloudNetworkClient: (consoleId) => {
+          if (!this.localSpec) {
+            throw new Error(
+              'No local Network spec loaded; cannot proxy Network calls via the cloud connector.',
+            );
+          }
+          if (!this.tenant.cloud) throw new MissingCredentialsError('cloud');
+          const cached = cloudNetworkClients.get(consoleId);
+          if (cached) return cached;
+          const built = this.buildCloudNetworkClient(this.tenant, consoleId, onWarn);
+          cloudNetworkClients.set(consoleId, built);
+          return built;
+        },
+        getNetworkSpec: () => this.localSpec,
+        callBudgetGuard,
+      });
+
+      // Build and inject the unifi namespace prelude. The cloud-network proxy
+      // surface is exposed only when both a local Network spec is available
+      // (for operation shapes) and the cloud namespace itself is present.
+      const prelude = buildUnifiPrelude(this.localSpec, this.cloudSpec, {
+        exposeCloudNetworkProxy: Boolean(this.localSpec) && Boolean(this.cloudSpec),
+      });
       const preludeResult = context.evalCode(prelude, 'prelude.js', { type: 'global' });
       if (preludeResult.error) {
         const errValue: unknown = context.dump(preludeResult.error);
@@ -187,7 +227,7 @@ export class ExecuteExecutor {
         for (let i = 0; i < maxDrains; i += 1) {
           const state = context.getPromiseState(valueHandle);
           if (state.type === 'fulfilled') {
-            const dumped = context.dump(state.value);
+            const dumped: unknown = context.dump(state.value);
             state.value.dispose();
             return {
               ok: true,
@@ -324,6 +364,85 @@ function bindNamespaceFunctions(
   rawFn.dispose();
 }
 
+interface CloudNetworkBinding {
+  getCloudNetworkClient: (consoleId: string) => HttpClient;
+  getNetworkSpec: () => ProcessedSpec | undefined;
+  callBudgetGuard: () => void;
+}
+
+function bindCloudNetworkProxyFunctions(
+  context: QuickJSAsyncContext,
+  binding: CloudNetworkBinding,
+): void {
+  const callFn = context.newAsyncifiedFunction(
+    '__unifiCallCloudNetwork',
+    async (
+      consoleIdHandle: QuickJSHandle,
+      opIdHandle: QuickJSHandle,
+      argsJsonHandle: QuickJSHandle,
+    ) => {
+      const consoleId = context.getString(consoleIdHandle);
+      const opId = context.getString(opIdHandle);
+      const argsJson = context.getString(argsJsonHandle);
+      try {
+        binding.callBudgetGuard();
+        if (!consoleId) {
+          throw new Error('unifi.cloud.network: consoleId is required.');
+        }
+        const args = parseJson(argsJson);
+        const spec = binding.getNetworkSpec();
+        if (!spec) {
+          throw new Error(
+            'unifi.cloud.network: Network spec not loaded — cannot dispatch operation.',
+          );
+        }
+        const client = binding.getCloudNetworkClient(consoleId);
+        const response = await dispatchOperation(client, spec, 'local', opId, args);
+        return jsonResponseToHandle(context, response.data);
+      } catch (err) {
+        throw new Error(formatCloudNetworkError(err));
+      }
+    },
+  );
+  context.setProp(context.global, '__unifiCallCloudNetwork', callFn);
+  callFn.dispose();
+
+  const rawFn = context.newAsyncifiedFunction(
+    '__unifiRawCloudNetwork',
+    async (consoleIdHandle: QuickJSHandle, argsJsonHandle: QuickJSHandle) => {
+      const consoleId = context.getString(consoleIdHandle);
+      const argsJson = context.getString(argsJsonHandle);
+      try {
+        binding.callBudgetGuard();
+        if (!consoleId) {
+          throw new Error('unifi.cloud.network: consoleId is required.');
+        }
+        const args = parseJson(argsJson) as unknown as Parameters<typeof dispatchRawRequest>[1];
+        const client = binding.getCloudNetworkClient(consoleId);
+        const response = await dispatchRawRequest(client, args);
+        return jsonResponseToHandle(context, response.data);
+      } catch (err) {
+        throw new Error(formatCloudNetworkError(err));
+      }
+    },
+  );
+  context.setProp(context.global, '__unifiRawCloudNetwork', rawFn);
+  rawFn.dispose();
+}
+
+function formatCloudNetworkError(err: unknown): string {
+  const detail = err instanceof Error ? err.message : String(err);
+  const tag =
+    err instanceof UnifiHttpError
+      ? 'unifi.cloud.network.http'
+      : err instanceof MissingCredentialsError
+      ? 'unifi.cloud.network.missing-credentials'
+      : err instanceof UnknownOperationError
+      ? 'unifi.cloud.network.unknown-operation'
+      : 'unifi.cloud.network.error';
+  return `[${tag}] ${detail}`;
+}
+
 function formatNamespacedError(namespace: 'local' | 'cloud', err: unknown): string {
   const detail = err instanceof Error ? err.message : String(err);
   const tag =
@@ -388,4 +507,13 @@ function defaultBuildCloudClient(
 ): HttpClient {
   if (!tenant.cloud) throw new MissingCredentialsError('cloud');
   return createCloudClient(tenant.cloud, { onWarn });
+}
+
+function defaultBuildCloudNetworkClient(
+  tenant: TenantContext,
+  consoleId: string,
+  onWarn: (msg: string) => void,
+): HttpClient {
+  if (!tenant.cloud) throw new MissingCredentialsError('cloud');
+  return createCloudNetworkProxyClient(tenant.cloud, consoleId, { onWarn });
 }

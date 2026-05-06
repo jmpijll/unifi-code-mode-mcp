@@ -82,7 +82,7 @@ export interface EnvCreds {
 const DEFAULT_CLOUD_BASE_URL = 'https://api.ui.com';
 
 /** Build a TenantContext from process.env. */
-export function buildContextFromEnv(env: EnvCreds = process.env as EnvCreds): TenantContext {
+export function buildContextFromEnv(env: EnvCreds = process.env): TenantContext {
   const ctx: TenantContext = {
     requestId: randomId(),
     fromHeaders: false,
@@ -104,7 +104,7 @@ export function buildContextFromEnv(env: EnvCreds = process.env as EnvCreds): Te
  */
 export function buildContextFromHeaders(
   headers: Record<string, string | string[] | undefined>,
-  fallbackEnv: EnvCreds = process.env as EnvCreds,
+  fallbackEnv: EnvCreds = process.env,
 ): TenantContext {
   const get = (name: string): string | undefined => {
     const raw = headers[name.toLowerCase()];

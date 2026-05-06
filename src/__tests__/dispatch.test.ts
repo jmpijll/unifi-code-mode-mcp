@@ -11,7 +11,9 @@ import type { OpenApiDocument, ProcessedSpec } from '../types/spec.js';
 import type { HttpClient } from '../client/http.js';
 
 function makeMockClient(): HttpClient & { request: ReturnType<typeof vi.fn> } {
-  const fn = vi.fn(async (params: unknown) => ({ status: 200, headers: {}, data: { ok: true, params } }));
+  const fn = vi.fn((params: unknown) =>
+    Promise.resolve({ status: 200, headers: {}, data: { ok: true, params } }),
+  );
   return { request: fn } as unknown as HttpClient & { request: ReturnType<typeof vi.fn> };
 }
 
@@ -124,6 +126,10 @@ describe('dispatchRawRequest', () => {
   });
 });
 
+// Tests below intentionally use `new Function(...)` to evaluate the generated
+// sandbox prelude in the host's V8 — that's the cheapest way to verify it parses
+// and runs correctly. The real sandbox uses QuickJS WASM, so this is test-only.
+/* eslint-disable @typescript-eslint/no-implied-eval, @typescript-eslint/no-non-null-assertion */
 describe('buildUnifiPrelude', () => {
   it('builds tag-grouped methods', () => {
     const prelude = buildUnifiPrelude(SPEC, undefined);
@@ -137,10 +143,112 @@ describe('buildUnifiPrelude', () => {
 
   it('produces a syntactically valid script', () => {
     const prelude = buildUnifiPrelude(SPEC, SPEC);
-    // Smoke-check by parsing as a Function body — throws SyntaxError on parse failure.
     expect(() => new Function(prelude)).not.toThrow();
   });
+
+  it('does not emit cloud.network() unless explicitly enabled', () => {
+    const prelude = buildUnifiPrelude(SPEC, SPEC);
+    expect(prelude).not.toContain('unifi.cloud.network = function');
+    expect(prelude).not.toContain('__unifiCallCloudNetwork');
+  });
+
+  it('emits cloud.network() factory when proxy surface is enabled', () => {
+    const prelude = buildUnifiPrelude(SPEC, SPEC, { exposeCloudNetworkProxy: true });
+    expect(prelude).toContain('unifi.cloud.network = function');
+    expect(prelude).toContain('__unifiCallCloudNetwork');
+    expect(prelude).toContain('__unifiRawCloudNetwork');
+    expect(() => new Function(prelude)).not.toThrow();
+  });
+
+  it('skips cloud.network() when local Network spec is missing', () => {
+    const prelude = buildUnifiPrelude(undefined, SPEC, { exposeCloudNetworkProxy: true });
+    expect(prelude).not.toContain('unifi.cloud.network = function');
+  });
+
+  it('cloud.network(consoleId) factory caches per-id and routes to host bindings', () => {
+    const prelude = buildUnifiPrelude(SPEC, SPEC, { exposeCloudNetworkProxy: true });
+    const calls: Array<{ consoleId: string; opId: string; argsJson: string }> = [];
+    const sandbox = {
+      __unifiCallLocal: () => undefined,
+      __unifiRawLocal: () => undefined,
+      __unifiCallCloud: () => undefined,
+      __unifiRawCloud: () => undefined,
+      __unifiCallCloudNetwork: (consoleId: string, opId: string, argsJson: string) => {
+        calls.push({ consoleId, opId, argsJson });
+        return { ok: true, consoleId, opId };
+      },
+      __unifiRawCloudNetwork: (consoleId: string, argsJson: string) => {
+        calls.push({ consoleId, opId: '<raw>', argsJson });
+        return { ok: true, consoleId };
+      },
+    };
+
+    type SandboxScope = typeof sandbox & { unifi?: Record<string, unknown> };
+    const fn = new Function(
+      '__unifiCallLocal',
+      '__unifiRawLocal',
+      '__unifiCallCloud',
+      '__unifiRawCloud',
+      '__unifiCallCloudNetwork',
+      '__unifiRawCloudNetwork',
+      `${prelude}\nreturn unifi;`,
+    ) as (...args: unknown[]) => SandboxScope['unifi'];
+
+    const unifi = fn(
+      sandbox.__unifiCallLocal,
+      sandbox.__unifiRawLocal,
+      sandbox.__unifiCallCloud,
+      sandbox.__unifiRawCloud,
+      sandbox.__unifiCallCloudNetwork,
+      sandbox.__unifiRawCloudNetwork,
+    );
+
+    expect(unifi).toBeDefined();
+    const cloud = (unifi as { cloud: { network: (id: string) => Record<string, unknown> } }).cloud;
+    const handleA = cloud.network('console-A');
+    const handleB = cloud.network('console-A');
+    expect(handleA).toBe(handleB);
+
+    const sites = handleA['sites'] as Record<string, (args: unknown) => unknown>;
+    sites['getSite']({ siteId: 'abc' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ consoleId: 'console-A', opId: 'getSite' });
+
+    const handleC = cloud.network('console-B');
+    expect(handleC).not.toBe(handleA);
+    (handleC as { request: (args: unknown) => unknown }).request({
+      method: 'GET',
+      path: '/v1/info',
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toMatchObject({ consoleId: 'console-B', opId: '<raw>' });
+  });
+
+  it('cloud.network() rejects empty consoleId', () => {
+    const prelude = buildUnifiPrelude(SPEC, SPEC, { exposeCloudNetworkProxy: true });
+    type SandboxScope = { unifi?: { cloud: { network: (id: unknown) => unknown } } };
+    const fn = new Function(
+      '__unifiCallLocal',
+      '__unifiRawLocal',
+      '__unifiCallCloud',
+      '__unifiRawCloud',
+      '__unifiCallCloudNetwork',
+      '__unifiRawCloudNetwork',
+      `${prelude}\nreturn unifi;`,
+    ) as (...args: unknown[]) => SandboxScope['unifi'];
+    const unifi = fn(
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+    );
+    expect(() => unifi!.cloud.network('')).toThrow(/consoleId/);
+    expect(() => unifi!.cloud.network(undefined)).toThrow(/consoleId/);
+  });
 });
+/* eslint-enable @typescript-eslint/no-implied-eval, @typescript-eslint/no-non-null-assertion */
 
 describe('sanitizeIdentifier', () => {
   it('replaces non-identifier chars', () => {

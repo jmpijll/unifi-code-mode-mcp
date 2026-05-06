@@ -23,9 +23,10 @@ export function findOperation(
   const split = trimmed.split(/\s+/);
   if (split.length === 2) {
     const [m, p] = split;
-    op = spec.operations.find(
-      (o) => o.method === m!.toUpperCase() && o.path === p,
-    );
+    if (m !== undefined && p !== undefined) {
+      const upper = m.toUpperCase();
+      op = spec.operations.find((o) => o.method === upper && o.path === p);
+    }
   }
   return op;
 }

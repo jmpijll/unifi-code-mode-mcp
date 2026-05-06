@@ -41,9 +41,9 @@ const SPEC: ProcessedSpec = {
 };
 
 function makeMockClient(): HttpClient & { request: ReturnType<typeof vi.fn> } {
-  const fn = vi.fn(async (params: unknown) => {
+  const fn = vi.fn((params: unknown) => {
     void params;
-    return {
+    return Promise.resolve({
       status: 200,
       headers: {},
       data: {
@@ -52,7 +52,7 @@ function makeMockClient(): HttpClient & { request: ReturnType<typeof vi.fn> } {
           { id: 's2', name: 'Site 2' },
         ],
       },
-    };
+    });
   });
   return { request: fn } as unknown as HttpClient & { request: ReturnType<typeof vi.fn> };
 }
@@ -206,5 +206,100 @@ describe('ExecuteExecutor', () => {
       path: '/v1/anything',
       query: { a: 1 },
     });
+  });
+
+  it('routes unifi.cloud.network(consoleId).<op>() through the cloud-network client', async () => {
+    const networkClient = makeMockClient();
+    const builds: string[] = [];
+    const tenant = buildContextFromEnv({
+      UNIFI_LOCAL_API_KEY: 'k',
+      UNIFI_LOCAL_BASE_URL: 'https://x',
+      UNIFI_CLOUD_API_KEY: 'cloud-key',
+    });
+    const exec = new ExecuteExecutor({
+      tenant,
+      localSpec: SPEC,
+      cloudSpec: SPEC,
+      buildCloudNetworkClient: (_tenant, consoleId) => {
+        builds.push(consoleId);
+        return networkClient;
+      },
+    });
+    const code = `
+      (async function() {
+        var net = unifi.cloud.network('console-XYZ');
+        var r = await net.sites.listSites({ limit: 5 });
+        return r;
+      })()
+    `;
+    const result = await exec.execute(code);
+    expect(result.ok).toBe(true);
+    expect(builds).toEqual(['console-XYZ']);
+    expect(networkClient.request).toHaveBeenCalledWith({
+      method: 'GET',
+      path: '/v1/sites',
+      pathParams: undefined,
+      query: { limit: 5 },
+      body: undefined,
+    });
+  });
+
+  it('caches cloud-network clients per consoleId across multiple calls', async () => {
+    const networkClient = makeMockClient();
+    const builds: string[] = [];
+    const tenant = buildContextFromEnv({
+      UNIFI_LOCAL_API_KEY: 'k',
+      UNIFI_LOCAL_BASE_URL: 'https://x',
+      UNIFI_CLOUD_API_KEY: 'cloud-key',
+    });
+    const exec = new ExecuteExecutor({
+      tenant,
+      localSpec: SPEC,
+      cloudSpec: SPEC,
+      buildCloudNetworkClient: (_tenant, consoleId) => {
+        builds.push(consoleId);
+        return networkClient;
+      },
+    });
+    // Sync-style: host calls are asyncified at the QuickJS layer, so they
+    // appear synchronous inside the sandbox. This avoids the chained-await
+    // path that QuickJS's asyncify shim handles less reliably.
+    const code = `
+      var net = unifi.cloud.network('id1');
+      net.sites.listSites({ limit: 1 });
+      net.sites.listSites({ limit: 2 });
+      var net2 = unifi.cloud.network('id2');
+      net2.sites.listSites({ limit: 3 });
+      'ok';
+    `;
+    const result = await exec.execute(code);
+    expect(result.ok).toBe(true);
+    expect(builds).toEqual(['id1', 'id2']);
+    expect(networkClient.request).toHaveBeenCalledTimes(3);
+  });
+
+  it('cloud.network() rejects when cloud credentials are missing', async () => {
+    const tenant = buildContextFromEnv({
+      UNIFI_LOCAL_API_KEY: 'k',
+      UNIFI_LOCAL_BASE_URL: 'https://x',
+    });
+    const exec = new ExecuteExecutor({
+      tenant,
+      localSpec: SPEC,
+      cloudSpec: SPEC,
+    });
+    const code = `
+      (async function() {
+        try {
+          var net = unifi.cloud.network('id1');
+          return await net.sites.listSites({});
+        } catch (err) {
+          return 'error: ' + err.message;
+        }
+      })()
+    `;
+    const result = await exec.execute(code);
+    expect(result.ok).toBe(true);
+    expect(String(result.data)).toMatch(/missing-credentials/i);
   });
 });

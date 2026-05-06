@@ -15,6 +15,8 @@ Run the server on `MCP_TRANSPORT=http` and let each MCP client supply its own cr
 
 If a namespace's required headers are absent, calls into that namespace produce a `MissingCredentialsError` *inside the sandbox* — the LLM sees a clear, actionable message and can react.
 
+`unifi.cloud.network(consoleId).*` uses the **cloud** API key only. The local headers are unused for that surface, so a deployment that only has the Site Manager key still gets the full Network Integration API (proxied through `api.ui.com`).
+
 ## Example MCP client request
 
 ```http

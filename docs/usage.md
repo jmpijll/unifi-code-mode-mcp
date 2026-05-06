@@ -53,9 +53,15 @@ getOperation('local', 'getSite');
 
 ### `execute`
 
-Run UniFi API calls inside the sandbox. Two namespaces: `unifi.local`, `unifi.cloud`.
+Run UniFi API calls inside the sandbox. Three target surfaces:
 
-> **Sync-style calls.** Inside the sandbox, calls to `unifi.local.<op>(...)` and `unifi.local.request(...)` appear synchronous (the host wraps async work transparently). You generally don't need `await`. The script's last expression is the tool result. Async/await IIFEs are also supported.
+| Surface | Auth | Reaches |
+| --- | --- | --- |
+| `unifi.local.*` | controller API key (`X-Unifi-Local-Api-Key`) | direct over LAN |
+| `unifi.cloud.*` | Site Manager key (`X-Unifi-Cloud-Api-Key`) | `api.ui.com` native (Hosts, Sites, Devices, ISP Metrics, SD-WAN) |
+| `unifi.cloud.network(consoleId).*` | Site Manager key | full Network Integration API, **tunneled through `api.ui.com`** so the controller never sees public traffic |
+
+> **Sync-style calls.** Inside the sandbox, calls to `unifi.local.<op>(...)` and friends appear synchronous (the host wraps async work transparently). You generally don't need `await`. The script's last expression is the tool result. Async/await IIFEs are supported but use sync style if you're chaining many calls — QuickJS's asyncify shim is more reliable that way.
 
 Surface:
 
@@ -64,8 +70,21 @@ unifi.local.<tag>.<operationId>(args)         // typed lookup
 unifi.local.callOperation(operationId, args)  // flat lookup by id
 unifi.local.request({ method, path, ... })    // raw escape hatch
 unifi.local.spec                              // { title, version, sourceUrl, operationCount }
-unifi.cloud.* (same shape)
+
+unifi.cloud.<tag>.<operationId>(args)         // Site Manager native, e.g. unifi.cloud.hosts.listHosts({})
+unifi.cloud.callOperation(operationId, args)
+unifi.cloud.request({ method, path, ... })
+unifi.cloud.spec
+
+unifi.cloud.network(consoleId)                // returns a per-console Network proxy:
+  ├─ .<tag>.<op>(args)                        //   same operation shape as unifi.local
+  ├─ .callOperation(opId, args)
+  ├─ .request({ method, path, ... })
+  ├─ .spec                                    //   identical to unifi.local.spec
+  └─ .consoleId
 ```
+
+Find your `consoleId` at `https://unifi.ui.com/consoles/<consoleId>/...` after logging in.
 
 Argument routing for typed calls:
 
@@ -96,17 +115,37 @@ unifi.local.request({ method: 'GET', path: '/v1/info' });
 ```
 
 ```js
-// Cloud
+// Cloud — Site Manager native
 var hosts = unifi.cloud.hosts.listHosts({});
 hosts.data.length;
 ```
 
+```js
+// Cloud — Network API tunneled through api.ui.com
+// No need for the controller to be reachable from the internet.
+var net = unifi.cloud.network('CONSOLE-ID-FROM-UNIFI-UI-COM');
+var sites = net.sites.listSites({ limit: 200 });
+var totalDevices = 0;
+for (var i = 0; i < sites.data.length; i++) {
+  var d = net.devices.listDevices({ siteId: sites.data[i].id });
+  totalDevices += (d && d.data ? d.data.length : 0);
+}
+({ siteCount: sites.data.length, totalDevices: totalDevices });
+```
+
+```js
+// Cloud-proxied raw escape hatch
+var net = unifi.cloud.network('CONSOLE-ID');
+net.request({ method: 'GET', path: '/v1/info' });
+```
+
 ## Common gotchas
 
-- **`(async function() {...})()`** — supported, but the host has to drain the in-VM microtask queue. Sync-style code is faster and easier to debug.
-- **Missing credentials** — calls to a namespace without credentials throw inside the sandbox. Catch with `try/catch` if you want to handle gracefully.
-- **TLS errors** — if your controller uses a self-signed cert, supply `X-Unifi-Local-Ca-Cert` (preferred) or set `X-Unifi-Local-Insecure: true`.
+- **`(async function() {...})()`** — supported for a single `await`, but chaining several awaits inside one async IIFE can stress QuickJS's asyncify shim. Prefer sync-style for multi-call workflows.
+- **Missing credentials** — calls to a namespace without credentials throw inside the sandbox. `unifi.cloud.network(...)` requires the **cloud** key, not the local one. Catch with `try/catch` if you want to handle gracefully.
+- **TLS errors** — only relevant for `unifi.local.*`. `api.ui.com` always uses a publicly trusted cert. If your controller uses a self-signed cert, supply `X-Unifi-Local-Ca-Cert` (preferred) or set `X-Unifi-Local-Insecure: true`.
 - **Result size** — large response bodies are truncated to 100 000 chars. Filter, paginate, or select fields server-side.
+- **Cloud-proxy auth** — the proxy uses the **Site Manager** key (`X-Unifi-Cloud-Api-Key`), NOT the controller's local key. Generate it at unifi.ui.com under your account API settings.
 
 ## Workflow
 

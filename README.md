@@ -12,7 +12,10 @@ The UniFi Network Integration API has **70+ endpoints**. Exposing each as a sepa
 ## Highlights
 
 - **Cloudflare Code Mode compatible** — two-tool design (`search` + `execute`), Cloudflare-style sandbox semantics
-- **Two API surfaces in one server** — `unifi.local.*` (per-controller Network Integration) and `unifi.cloud.*` (Site Manager)
+- **Three API surfaces in one server** —
+  - `unifi.local.*` — direct Network Integration API on a controller you can reach over the LAN
+  - `unifi.cloud.*` — Site Manager native endpoints (Hosts, Sites, Devices, ISP Metrics, SD-WAN)
+  - `unifi.cloud.network(consoleId).*` — full Network Integration API, **proxied through `api.ui.com`** so a single Site Manager API key drives any console without exposing the controller publicly
 - **Single-user (env) and multi-user (per-request HTTP headers)** — the same server runs as a private homelab tool or a hosted multi-tenant gateway
 - **QuickJS WASM sandbox** — memory, CPU, time, and call-budget limits; credentials never enter the sandbox
 - **Dynamic OpenAPI loading** — the controller's app version is auto-discovered (`GET /v1/info`); the spec is fetched from `apidoc-cdn.ui.com` and cached on disk
@@ -65,16 +68,29 @@ spec.local.operations
 Then executes calls:
 
 ```js
-// execute tool
-const sites = await unifi.local.sites.list({ limit: 200 });
-const counts = await Promise.all(
-  sites.data.map(async (site) => ({
-    name: site.name,
-    devices: (await unifi.local.devices.list({ siteId: site.id })).data.length,
-  })),
-);
-return counts;
+// execute tool — direct local
+var sites = unifi.local.sites.listSites({ limit: 200 });
+sites.data.map(function (s) { return { id: s.id, name: s.name }; });
 ```
+
+Or, if you only have a Site Manager API key and want remote access without exposing the controller to the internet:
+
+```js
+// execute tool — Network API proxied through api.ui.com
+var net = unifi.cloud.network('CONSOLE-ID-FROM-UNIFI-UI-COM');
+var sites = net.sites.listSites({ limit: 200 });
+sites.data.length;
+```
+
+## Status
+
+Pre-1.0. The Network Integration API spec is loaded dynamically from Ubiquiti's CDN; the server should adapt to controller version changes without code edits.
+
+### Roadmap
+
+- **UniFi Protect proxy** — `unifi.cloud.protect(consoleId).*` over the same `/v1/connector/consoles/{id}/proxy/protect/integration` connector
+- **Per-tenant rate limiting** keyed on hashed credentials (currently per-IP)
+- **Optional persistent spec cache** versioned by controller fingerprint
 
 ## Documentation
 
@@ -83,10 +99,6 @@ return counts;
 - [docs/security.md](docs/security.md) — Threat model, credential handling, sandbox guarantees
 - [docs/deployment.md](docs/deployment.md) — Docker, Cloudflare Workers, systemd
 - [docs/usage.md](docs/usage.md) — Tool descriptions, common patterns, gotchas
-
-## Status
-
-Pre-1.0. The Network Integration API spec is loaded dynamically from Ubiquiti's CDN; the server should adapt to controller version changes without code edits.
 
 ## License
 

@@ -62,7 +62,19 @@ Two executors:
 
 ## Spec ingestion (cloud)
 
-The Site Manager OpenAPI URL is checked at runtime. If absent, the server falls back to a curated minimal schema in `src/spec/cloud-fallback.json` covering documented read-only endpoints (`/v1/hosts`, `/v1/sites`, `/v1/devices`, `/v1/sites/{siteId}/isp-metrics/{type}`).
+The Site Manager OpenAPI URL is checked at runtime. As of writing, Ubiquiti does not publish a machine-readable OpenAPI document at any of the obvious URLs (`apidoc-cdn.ui.com/site-manager/openapi.json`, `api.ui.com/openapi.json`, etc.), so the server ships a curated fallback at `src/spec/cloud-fallback.json` covering documented endpoints (`/v1/hosts`, `/v1/sites`, `/v1/devices`, `/v1/sites/{siteId}/isp-metrics/{type}`, `/v1/sd-wan-configs`). The loader will switch to a live spec automatically the day Ubiquiti publishes one.
+
+## Cloud → Network proxy surface
+
+`api.ui.com` exposes a generic console-passthrough at `/v1/connector/consoles/{consoleId}/*path` that forwards arbitrary requests to applications running on a UniFi console (Network, Protect, ...). The Network Integration API is reachable through it at:
+
+```
+https://api.ui.com/v1/connector/consoles/{consoleId}/proxy/network/integration/v1/...
+```
+
+`buildUnifiPrelude({ exposeCloudNetworkProxy: true })` emits a `unifi.cloud.network(consoleId)` factory in the sandbox that returns a per-console proxy object identical in shape to `unifi.local.*` but routed via host bindings `__unifiCallCloudNetwork(consoleId, opId, argsJson)` and `__unifiRawCloudNetwork(consoleId, argsJson)`. On the host, `createCloudNetworkProxyClient(creds, consoleId)` builds an `HttpClient` whose `pathPrefix` is the connector path; otherwise it's identical to the regular cloud client (strict TLS, Site Manager API key).
+
+Per-`consoleId` clients are cached for the duration of one `execute` invocation. They never outlive the request — credentials and clients are garbage-collected when the executor disposes.
 
 ## Cloudflare Workers entry
 
