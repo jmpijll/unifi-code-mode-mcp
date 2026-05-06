@@ -4,7 +4,9 @@
  * Network Integration spec: dynamic discovery — call `/v1/info` on the
  * controller to read its `applicationVersion`, then fetch
  *   https://apidoc-cdn.ui.com/network/v<version>/integration.json
- * The result is $ref-resolved and cached on disk + in memory keyed by version.
+ * If the CDN does not host that exact version (Ubiquiti only publishes
+ * certain tagged releases), fall back to the latest known-published
+ * version. The result is $ref-resolved and cached on disk + in memory.
  *
  * Site Manager spec: try the documented spec URL first, fall back to the
  * curated minimal schema in `cloud-fallback.json` if Ubiquiti hasn't
@@ -57,6 +59,8 @@ export interface LoadLocalSpecOptions {
   cacheDir: string;
   /** Force re-fetch from network even if cache exists. */
   forceRefresh?: boolean;
+  /** Optional callback for non-fatal load warnings (spec fallbacks, etc.). */
+  onWarn?: (msg: string) => void;
 }
 
 export interface LoadCloudSpecOptions {
@@ -82,43 +86,55 @@ export async function loadLocalSpec(opts: LoadLocalSpecOptions): Promise<Process
 
   const dispatcher = buildDispatcher({ caCert: opts.caCert, insecure: opts.insecure });
 
-  let specUrl: string;
-  let version: string;
+  const onWarn = opts.onWarn ?? (() => undefined);
+
+  let primaryUrl: string;
+  let primaryVersion: string;
 
   if (opts.specUrlOverride) {
-    specUrl = opts.specUrlOverride;
-    version = extractVersionFromUrl(specUrl) ?? 'override';
+    primaryUrl = opts.specUrlOverride;
+    primaryVersion = extractVersionFromUrl(primaryUrl) ?? 'override';
   } else {
     const info = await fetchControllerInfo(opts.baseUrl, opts.apiKey, dispatcher);
-    version = info.applicationVersion;
-    specUrl = networkSpecUrlForVersion(version);
+    primaryVersion = info.applicationVersion;
+    primaryUrl = networkSpecUrlForVersion(primaryVersion);
   }
 
-  const key: SpecCacheKey = { kind: 'local', version };
-  const memoKey = cacheKeyToString(key);
+  // Cache lookup by the *requested* version. Multiple controllers reporting
+  // the same version share the cache; controllers reporting versions for
+  // which only a fallback is available will resolve to the fallback's cache.
+  const requestedKey: SpecCacheKey = { kind: 'local', version: primaryVersion };
+  const requestedMemoKey = cacheKeyToString(requestedKey);
 
   if (!opts.forceRefresh) {
-    const cached = memoryCache.get(memoKey);
+    const cached = memoryCache.get(requestedMemoKey);
     if (cached) return cached;
 
-    const onDisk = await readCacheFile(cacheFilePath(opts.cacheDir, key));
+    const onDisk = await readCacheFile(cacheFilePath(opts.cacheDir, requestedKey));
     if (onDisk) {
-      memoryCache.set(memoKey, onDisk);
+      memoryCache.set(requestedMemoKey, onDisk);
       return onDisk;
     }
   }
 
-  const document = await fetchSpec(specUrl);
+  const fetched = await fetchSpecWithFallbacks(primaryUrl, primaryVersion, onWarn);
   const processed = await processSpec({
-    document,
-    sourceUrl: specUrl,
-    version,
+    document: fetched.document,
+    sourceUrl: fetched.sourceUrl,
+    version: fetched.version,
     title: 'UniFi Network Integration API',
     defaultServerPrefix: '/proxy/network/integration',
   });
 
-  memoryCache.set(memoKey, processed);
-  await writeCacheFile(cacheFilePath(opts.cacheDir, key), processed);
+  // Cache under both the requested and the resolved version so subsequent
+  // calls for either skip the fallback ladder.
+  memoryCache.set(requestedMemoKey, processed);
+  await writeCacheFile(cacheFilePath(opts.cacheDir, requestedKey), processed);
+  if (fetched.version !== primaryVersion) {
+    const resolvedKey: SpecCacheKey = { kind: 'local', version: fetched.version };
+    memoryCache.set(cacheKeyToString(resolvedKey), processed);
+    await writeCacheFile(cacheFilePath(opts.cacheDir, resolvedKey), processed);
+  }
   return processed;
 }
 
@@ -221,6 +237,15 @@ function networkSpecUrlForVersion(version: string): string {
   return `https://apidoc-cdn.ui.com/network/${v}/integration.json`;
 }
 
+/**
+ * Versions of the Network Integration spec we've confirmed are published
+ * on apidoc-cdn.ui.com. Used as fallbacks when the controller reports a
+ * version the CDN doesn't host (most minor releases don't get re-published).
+ *
+ * Order: most-recent-known-good first. To extend, simply add a tag here.
+ */
+export const KNOWN_NETWORK_SPEC_VERSIONS: readonly string[] = ['10.1.84'];
+
 function extractVersionFromUrl(url: string): string | undefined {
   const m = /\/v?(\d+\.\d+\.\d+)\//.exec(url);
   return m?.[1];
@@ -233,13 +258,56 @@ async function fetchSpec(url: string): Promise<OpenApiDocument> {
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) {
-    throw new Error(`Failed to fetch OpenAPI from ${url}: HTTP ${String(res.status)}`);
+    const err = new Error(`Failed to fetch OpenAPI from ${url}: HTTP ${String(res.status)}`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
   }
   const body = (await res.json()) as OpenApiDocument;
   if (typeof body !== 'object' || typeof body.paths !== 'object') {
     throw new Error(`Invalid OpenAPI document at ${url} — missing paths`);
   }
   return body;
+}
+
+/**
+ * Fetch a spec, falling back through `KNOWN_NETWORK_SPEC_VERSIONS` if the
+ * primary URL returns 403/404. Returns `[document, finalSourceUrl, finalVersion]`.
+ */
+async function fetchSpecWithFallbacks(
+  primaryUrl: string,
+  primaryVersion: string,
+  onWarn: (msg: string) => void,
+): Promise<{ document: OpenApiDocument; sourceUrl: string; version: string }> {
+  try {
+    const document = await fetchSpec(primaryUrl);
+    return { document, sourceUrl: primaryUrl, version: primaryVersion };
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status;
+    if (status !== 403 && status !== 404) throw err;
+    onWarn(
+      `Network spec for v${primaryVersion} not published on apidoc-cdn.ui.com (HTTP ${String(status)}). ` +
+        'Falling back to nearest known-good version.',
+    );
+  }
+  let lastErr: unknown;
+  for (const v of KNOWN_NETWORK_SPEC_VERSIONS) {
+    if (v === primaryVersion) continue;
+    const url = networkSpecUrlForVersion(v);
+    try {
+      const document = await fetchSpec(url);
+      onWarn(
+        `Loaded Network spec v${v} as a fallback for controller v${primaryVersion}. ` +
+          'API surface is generally backwards-compatible; check operationIds if a call fails unexpectedly.',
+      );
+      return { document, sourceUrl: url, version: v };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw new Error(
+    `No Network OpenAPI spec available for controller v${primaryVersion} or any known fallback version. ` +
+      `Last error: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
+  );
 }
 
 interface ProcessSpecArgs {
