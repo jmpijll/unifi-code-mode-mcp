@@ -147,17 +147,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
-- README "Project status" callout updated: 4-of-5 surfaces are now
-  live-verified.
-- README verification matrix gains two new rows for the LAN-direct
-  sweeps; the "not yet verified" list and roadmap drop the local-
-  Protect entries that are now satisfied and gain new entries for
-  LLM-mediated LAN-direct invocation and mutation paths.
-- Root `SKILL.md`, root `AGENTS.md`, and
-  `examples/unifi-expert-agent/AGENTS.md` updated to reflect
-  `unifi.local.*` and `unifi.local.protect.*` as live-verified.
-- `examples/unifi-expert-agent/install.md` adds a surface-verification
-  callout under the verification legend.
+- Full doc audit and refresh sweep across `README.md`, `SKILL.md`,
+  `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`,
+  `docs/protect-design.md`, `examples/unifi-expert-agent/*`,
+  `.github/ISSUE_TEMPLATE/verification_report.yml`, and `.env.example`
+  to align with the current verified state:
+  - Test count bumped everywhere it was cited (98 → 105) — root
+    `AGENTS.md`, `CONTRIBUTING.md`, README "Project status" callout,
+    README verification matrix, `docs/protect-design.md` §4.
+  - Live-verification claims tightened: Protect mutation round-trip,
+    LLM-mediated LAN-direct **Network** invocation, and MCP Inspector
+    CLI mode are now first-class verified items in the README, root
+    `AGENTS.md` §8.1, and the verification-report issue template.
+  - Stale claims removed: "no live-Protect end-to-end yet" in root
+    `AGENTS.md` §2, "live-verification pending" for cloud Protect in
+    `.env.example`, and the pre-Protect-mutation language in the
+    expert agent's beta-status reminders.
+  - Roadmap deduplicated and re-ordered in both `README.md` and root
+    `AGENTS.md` §10: Network mutation verification (gated on
+    polymorphic-discriminator extraction), LLM-mediated LAN-direct
+    Protect invocation, non-rename Protect mutations, MCP Inspector
+    UI mode, and HTTP/SSE transports under the Inspector are the
+    open items.
+  - Bad-example top-level `return` and `await` patterns purged from
+    `examples/unifi-expert-agent/SKILL.md` recipes; each recipe now
+    ends in a trailing expression statement, with an IIFE pattern
+    shown explicitly when an early-return is needed. The
+    `examples/unifi-expert-agent/AGENTS.md` "Tool-call format
+    reminders" section now correctly documents that both tools take a
+    single `code` string (not separate `query`/`namespace`/`args`
+    parameters), with the three sandbox-dialect quick rules inlined.
+  - `examples/unifi-expert-agent/install.md` opencode entry updated
+    to mirror the project-root `opencode.json` (passes
+    `UNIFI_LOCAL_BASE_URL` / `UNIFI_LOCAL_API_KEY` /
+    `UNIFI_LOCAL_INSECURE` / `UNIFI_CLOUD_API_KEY` through via
+    `{env:VAR}` interpolation, with a `permission` block for
+    `unifi_*`).
+  - `SECURITY.md` corrected the Cloudflare Workers entry path
+    (`cf-worker/index.ts`, not the never-existed
+    `src/cloudflare/worker.ts`).
+  - Root `AGENTS.md` §6 gains a new gotcha (§6.7) about bumping
+    `CACHE_SCHEMA_VERSION` whenever `processSpec` or
+    `buildOperationIndex` shape changes — this is what we paid for
+    during the MCP Inspector smoke test.
+  - Root `AGENTS.md` §3 daily dev loop and §4 file map gain entries
+    for `discover-protect.ts`, `discover-local.ts`, and
+    `verify-mutations.ts`.
 
 ## [0.2.0-beta.1] — 2026-05-07
 

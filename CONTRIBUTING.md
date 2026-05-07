@@ -43,7 +43,7 @@ npm install
 cp .env.example .env
 # Set UNIFI_LOCAL_API_KEY / UNIFI_CLOUD_API_KEY as needed.
 npm run typecheck      # tsc --noEmit
-npm test               # vitest run (98 specs)
+npm test               # vitest run (105 specs)
 npm run lint           # eslint
 npm run build          # tsc + copy fallback specs
 ```
@@ -52,7 +52,7 @@ Quality gates that have to pass before a PR merges:
 
 - `npm run lint` — clean
 - `npm run typecheck` — clean
-- `npm test` — 98/98 (or more, with your additions)
+- `npm test` — 105/105 (or more, with your additions)
 - `npm run build` — clean
 
 We tolerate `npm run format:check` warnings on pre-existing files (the

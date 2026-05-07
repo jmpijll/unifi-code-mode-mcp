@@ -370,18 +370,27 @@ have LAN reachability.
   and are gitignored. Do not paste them into chats unless the user is
   the network owner.
 - **Pre-1.0 client coverage is narrow.** The MCP wire protocol has
-  been verified end-to-end with two clients:
-  - Claude Sonnet 4.6 through `cursor-agent` interactive PTY mode.
-  - DeepSeek v4 Flash through `opencode --pure run`.
+  been verified end-to-end through:
+  - Claude Sonnet 4.6 driving the cloud surface through `cursor-agent`
+    interactive PTY mode.
+  - DeepSeek v4 Flash driving the cloud surface through
+    `opencode --pure run`.
+  - DeepSeek v4 Flash driving the **LAN-direct Network** surface
+    through `opencode run` (with credentials piped through
+    `opencode.json` `environment`).
+  - The official **MCP Inspector CLI** (`@modelcontextprotocol/inspector@0.20.0`)
+    against the live UDM-Pro, covering `tools/list`, credential-free
+    `tools/call execute`, credentialled `tools/call search`, and
+    credentialled `tools/call execute`.
 
   See [README → Verification status](README.md#verification-status)
   for the matrix and known per-client gotchas (`docs/cursor-skill.md`
   §8 and `docs/opencode-skill.md` §6). It has *not* yet been validated
   against the Cursor IDE chat panel, Claude Desktop, Continue, Cline,
-  Codeium, Aider, Zed, or the MCP Inspector UI. If you find a client
-  where the server misbehaves, open an issue with the protocol log;
-  the server itself is wire-correct, so most surprises will be in
-  client wiring or env-var passing.
+  Codeium, Aider, Zed, or the MCP Inspector **UI** (browser) mode. If
+  you find a client where the server misbehaves, open an issue with
+  the protocol log; the server itself is wire-correct, so most
+  surprises will be in client wiring or env-var passing.
 
 ## 11. Where to look for more
 

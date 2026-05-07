@@ -32,7 +32,10 @@ Just give me the host id, reported name, IP, and current state for each.
 
 **Expected behaviour:**
 
-1. Calls `unifi_search` with something like `{ query: "hosts", namespace: "cloud" }`.
+1. Calls `unifi_search` with `{ "code": "searchOperations('cloud', 'hosts', 5)" }`.
+   (Both tools take a single `code` string; the namespace is an
+   argument to the in-sandbox `searchOperations` helper, not a tool
+   parameter.)
 2. Reads the response, finds an operationId like `listHosts`.
 3. Calls `unifi_execute` with code that runs
    `unifi.cloud.callOperation('listHosts')` (or

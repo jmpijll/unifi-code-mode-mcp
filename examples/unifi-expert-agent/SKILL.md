@@ -19,7 +19,7 @@ vendor-neutral; this one is focused on how the **UniFi expert agent**
 
 | Tool | Use it to |
 |---|---|
-| `search` | Find an operationId before you call it. Always. Default to `limit: 5` and a tight keyword. Optionally pass `namespace: "local" \| "cloud" \| "local.protect" \| "cloud.protect"` to scope the catalogue. |
+| `search` | Find an operationId before you call it. Always. Both tools accept a single `code` string. Inside that code you call the in-sandbox helper `searchOperations(namespace, query, limit?)` where `namespace` is `'local'`, `'cloud'`, or `'protect'` (cloud-proxied surfaces share specs with their local twins). Default to `limit: 5` and a tight keyword. |
 | `execute` | Run JavaScript that calls UniFi via the `unifi.*` global. Last expression's value is returned to you. |
 
 ### Sandbox dialect — three rules that catch most LLMs
@@ -63,12 +63,25 @@ const meta = unifi.cloud.protect('CONSOLE').request({
 ```
 
 Always check `unifi.<surface>.spec` first if you're not sure the surface
-is loaded:
+is loaded. Because top-level `return` is a syntax error in QuickJS,
+either short-circuit with a ternary or wrap the whole script in an
+IIFE:
 
 ```js
-if (!unifi.cloud?.spec) {
-  return { error: 'No cloud credential configured for this tenant' };
-}
+// Pattern A — ternary on the last expression
+unifi.cloud && unifi.cloud.spec
+  ? unifi.cloud.callOperation('listHosts').data.length
+  : { error: 'No cloud credential configured for this tenant' };
+```
+
+```js
+// Pattern B — IIFE so you can `return` early
+(function () {
+  if (!unifi.cloud || !unifi.cloud.spec) {
+    return { error: 'No cloud credential configured for this tenant' };
+  }
+  return unifi.cloud.callOperation('listHosts').data.length;
+})();
 ```
 
 ## Default workflow for any new task
@@ -91,36 +104,50 @@ These are the tasks the persona is expected to do well. Each shows the
 preferred call shape; substitute path-based `request()` if your
 controller's spec uses different operationIds.
 
+> **Reminder:** every recipe below is an `execute` script. Top-level
+> `return` would be a `SyntaxError: return not in a function` in
+> QuickJS, so each recipe ends with the result expression directly. If
+> you genuinely need an early return, wrap the whole body in an IIFE
+> (`(function () { … })()`).
+
 ### Inventory a single console (read-only)
 
 ```js
-const hosts = unifi.cloud.callOperation('listHosts').data;
-const console = hosts.find(h => h.id === args.consoleId);
-const net = unifi.cloud.network(args.consoleId);
-const sites = net.sites.listSites();
-const devices = sites.flatMap(site =>
-  net.devices.listAdoptedDevices({ siteId: site.id }).map(d => ({
-    site: site.name,
-    name: d.name,
-    model: d.model,
-    macAddress: d.macAddress,
-    ipAddress: d.ipAddress,
-    state: d.state,
-    firmwareVersion: d.firmwareVersion,
-  })),
-);
-return { console: console?.reportedState?.name ?? args.consoleId, sites: sites.length, devices };
+var hosts = unifi.cloud.callOperation('listHosts').data;
+var consoleEntry = hosts.find(function (h) { return h.id === args.consoleId; });
+var net = unifi.cloud.network(args.consoleId);
+var sites = net.sites.listSites();
+var devices = sites.flatMap(function (site) {
+  return net.devices.listAdoptedDevices({ siteId: site.id }).map(function (d) {
+    return {
+      site: site.name,
+      name: d.name,
+      model: d.model,
+      macAddress: d.macAddress,
+      ipAddress: d.ipAddress,
+      state: d.state,
+      firmwareVersion: d.firmwareVersion,
+    };
+  });
+});
+({
+  console: consoleEntry && consoleEntry.reportedState ? consoleEntry.reportedState.name : args.consoleId,
+  sites: sites.length,
+  devices: devices,
+});
 ```
 
 ### Audit firmware drift
 
 ```js
-const sites = unifi.cloud.network(args.consoleId).sites.listSites();
-const drift = [];
-for (const site of sites) {
-  const devs = unifi.cloud.network(args.consoleId)
-    .devices.listAdoptedDevices({ siteId: site.id });
-  for (const d of devs) {
+var net = unifi.cloud.network(args.consoleId);
+var sites = net.sites.listSites();
+var drift = [];
+for (var i = 0; i < sites.length; i++) {
+  var site = sites[i];
+  var devs = net.devices.listAdoptedDevices({ siteId: site.id });
+  for (var j = 0; j < devs.length; j++) {
+    var d = devs[j];
     if (d.firmwareUpdatable) {
       drift.push({
         site: site.name,
@@ -131,63 +158,71 @@ for (const site of sites) {
     }
   }
 }
-return { totalSites: sites.length, drift };
+({ totalSites: sites.length, drift: drift });
 ```
 
 ### High-level design (HLD)
 
 ```js
-const consoles = unifi.cloud.callOperation('listHosts').data;
-const summary = consoles.map(c => {
-  const net = unifi.cloud.network(c.id);
-  const sites = net.sites.listSites();
+var consoles = unifi.cloud.callOperation('listHosts').data;
+consoles.map(function (c) {
+  var net = unifi.cloud.network(c.id);
+  var sites = net.sites.listSites();
   return {
-    console: c.reportedState?.name ?? c.id,
-    sites: sites.map(s => {
-      const devs = net.devices.listAdoptedDevices({ siteId: s.id });
-      const counts = {};
-      for (const d of devs) counts[d.model] = (counts[d.model] ?? 0) + 1;
+    console: c.reportedState && c.reportedState.name ? c.reportedState.name : c.id,
+    sites: sites.map(function (s) {
+      var devs = net.devices.listAdoptedDevices({ siteId: s.id });
+      var counts = {};
+      for (var k = 0; k < devs.length; k++) {
+        var m = devs[k].model;
+        counts[m] = (counts[m] || 0) + 1;
+      }
       return { name: s.name, deviceCounts: counts };
     }),
   };
 });
-return summary;
 ```
 
 ### Inventory cameras (Protect)
 
 ```js
-const p = unifi.cloud.protect(args.consoleId);
-const cameras = p.request({ method: 'GET', path: '/v1/cameras' });
-return cameras.map(c => ({
-  id: c.id,
-  name: c.name,
-  modelKey: c.modelKey,
-  state: c.state,
-  firmwareVersion: c.firmwareVersion,
-  isMicEnabled: c.isMicEnabled,
-}));
+var p = unifi.cloud.protect(args.consoleId);
+var cameras = p.request({ method: 'GET', path: '/v1/cameras' });
+cameras.map(function (c) {
+  return {
+    id: c.id,
+    name: c.name,
+    modelKey: c.modelKey,
+    state: c.state,
+    firmwareVersion: c.firmwareVersion,
+    isMicEnabled: c.isMicEnabled,
+  };
+});
 ```
 
 ### Confirm-before-mutate (PTZ goto preset)
 
 ```js
-// READ FIRST: tell the user what we're about to do.
-const p = unifi.cloud.protect(args.consoleId);
-const cam = p.request({ method: 'GET', path: `/v1/cameras/${args.cameraId}` });
-const target = cam.ptzPresets?.find(pr => pr.name === args.presetName);
-if (!target) {
-  return { error: `No preset named ${args.presetName} on ${cam.name}` };
-}
-// HALT. Surface this back to the user and only proceed on a follow-up turn:
-return {
-  intent: `ptz goto preset "${args.presetName}" on ${cam.name}`,
-  presetSlot: target.slot,
-  awaitingConfirmation: true,
-};
+// READ-FIRST script: tells the user what we're about to do.
+// IIFE so we can early-return without violating the no-top-level-return rule.
+(function () {
+  var p = unifi.cloud.protect(args.consoleId);
+  var cam = p.request({ method: 'GET', path: '/v1/cameras/' + args.cameraId });
+  var presets = cam.ptzPresets || [];
+  var target = presets.find(function (pr) { return pr.name === args.presetName; });
+  if (!target) {
+    return { error: 'No preset named ' + args.presetName + ' on ' + cam.name };
+  }
+  return {
+    intent: 'ptz goto preset "' + args.presetName + '" on ' + cam.name,
+    presetSlot: target.slot,
+    awaitingConfirmation: true,
+  };
+})();
 
-// On the user's "yes, proceed", run a second execute call:
-// p.callOperation('cameraPtzGoto', { id: args.cameraId, slot: target.slot });
+// On the user's "yes, proceed", run a SECOND execute call:
+// var p = unifi.cloud.protect(args.consoleId);
+// p.callOperation('cameraPtzGoto', { id: args.cameraId, slot: args.presetSlot });
 ```
 
 ## Common gotchas

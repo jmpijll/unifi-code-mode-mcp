@@ -137,29 +137,53 @@ on this controller?` style message.
 
 What we **have** verified:
 
-- Unit tests against `protect-fallback.json` (loader, dispatcher, prelude
-  emission, error formatting). 94 tests, all passing.
+- Unit tests against the Protect surfaces (loader, dispatcher, prelude
+  emission, error formatting, tag-name compaction). All 105 tests
+  passing as of the latest commit.
 - Mock-controller integration tests (Scenario D) — drive the new prelude
   through `InMemoryTransport` for `getProtectMetaInfo`, `listCameras`,
   `getCamera`.
 - HTTP HEAD probes confirm `apidoc-cdn.ui.com/protect/v7.0.107/integration.json`
-  and `v7.0.94/integration.json` are 200, identifying which CDN tags
-  the loader can rely on.
+  and `v7.0.94/integration.json` are 200; the loader's
+  `KNOWN_PROTECT_SPEC_VERSIONS = ['7.0.107', '7.0.94']` ladder reflects
+  this.
 - The Site Manager → Protect proxy URL pattern is officially documented
   by Ubiquiti (`developer.ui.com/protect/v7.0.107/...`).
+- **A real read-only sweep of cloud-Protect** through
+  `unifi.cloud.protect(consoleId).request(...)` against a UDM-Pro
+  running Protect 7.0.107 (2026-05-07). The loader pulled the official
+  spec from the CDN (35 ops); `getProtectMetaInfo` returned a real
+  `applicationVersion` and `listCameras` returned 4 real cameras.
+  Sanitized transcript at `out/verification/cloud-protect-live-smoke.txt`.
+- **A real read-only sweep of LAN-direct Protect** through
+  `unifi.local.protect.*` against the same UDM-Pro on the same date,
+  returning identical 4-camera results in 162 ms (cross-confirms the
+  wire path). Sanitized transcript at
+  `out/verification/local-protect-live-smoke.txt`.
+- **A live mutation round-trip on Protect** (`PATCH /v1/cameras/{id}`):
+  rename a DISCONNECTED camera → GET-verify → revert → GET-verify,
+  three sequential `ExecuteExecutor` invocations, six host calls
+  total. Sanitized transcript at
+  `out/verification/mutation-live-smoke.txt`.
 
-What is **not yet** verified (needs a Protect deployment):
+What is **not yet** verified:
 
-- That a real Protect 7.x controller responds the way our hand-written
-  fallback says it does, when the loader can't reach the CDN.
-- That `unifi.cloud.protect(consoleId).<tag>.<op>(args)` works against
-  a real Protect-enabled console via the `api.ui.com` cloud connector.
-  Structurally identical to the Network cloud proxy we already use; the
-  curl path pattern matches what the loader emits; but no live-fire
-  smoke test yet.
-
-These will be marked **mock-verified, live-pending** in the README
-verification table until someone with a Protect deployment proves them.
+- That a real Protect 7.x controller responds the way our **hand-
+  written fallback** (`src/spec/protect-fallback.json`) says it does
+  when the loader can't reach the CDN. Live verifications above all
+  used the official CDN-fetched spec.
+- **End-to-end LLM-mediated invocation against `unifi.local.protect.*`.**
+  The Network LAN-direct path is LLM-verified via `opencode`; the
+  Protect equivalent has not been recorded.
+- **Mutations beyond camera-rename.** PTZ commands
+  (`POST /v1/cameras/{id}/ptz/goto/{slot}`),
+  `disableCameraMicPermanently` (irreversible by name), the alarm-
+  manager webhook trigger, and the `rtsps-stream` enable/disable pair
+  are wired but unproven against real hardware. The
+  `POST /v1/liveviews` endpoint accepts creates but the Integration API
+  has **no DELETE** for liveviews — `verify-mutations.ts` therefore
+  never creates one.
+- **Binary / streaming surfaces** — see §5.
 
 ## 5. Out of scope (this iteration)
 
