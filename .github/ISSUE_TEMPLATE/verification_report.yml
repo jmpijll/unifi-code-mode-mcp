@@ -1,0 +1,133 @@
+name: Verification report
+description: |
+  You wired this MCP into an agent platform we haven't verified yet (or
+  re-verified one we already had). Tell us what worked and what didn't.
+title: "[verify] "
+labels: ["verification", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This is the most useful kind of issue right now.** We've
+        verified the server end-to-end with `cursor-agent` (Claude
+        Sonnet 4.6) and `opencode` (DeepSeek v4 Flash). Everything else
+        — Claude Code, Claude Desktop, VS Code + Copilot, Codex CLI,
+        Continue, Cline, MCP Inspector, Aider, Zed, your own client —
+        is theoretically wired but **NOT verified by us**.
+
+        Submit a verification report whether things worked OR didn't.
+        Both are useful.
+
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Outcome
+      options:
+        - "Worked end-to-end — LLM successfully called the MCP and got real data back"
+        - "Partial — protocol-level (search/execute) works, but LLM-mediated invocation didn't trigger"
+        - "Broken — MCP didn't load / connection failed"
+        - "Other (explain below)"
+    validations:
+      required: true
+
+  - type: input
+    id: agent
+    attributes:
+      label: Agent / client
+      description: The tool that hosts the LLM and speaks MCP.
+      placeholder: "Claude Code 1.0.4 / Claude Desktop 0.10.x / VS Code 1.95 + Copilot Chat / Codex CLI 0.4 / Continue 0.10 / Cline 3.x / opencode 1.14.30 / MCP Inspector / custom"
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: "claude-sonnet-4.6 / claude-opus-4.6 / gpt-4o / gpt-5 / deepseek-v4 / gemini-2.5-pro / llama-3.3 / etc."
+    validations:
+      required: true
+
+  - type: input
+    id: server_version
+    attributes:
+      label: Server version
+      placeholder: "v0.2.0-beta.1 / commit abcdef0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - "stdio"
+        - "Streamable HTTP"
+        - "Cloudflare Workers (remote HTTP)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: How you wired it up
+      description: |
+        Paste the relevant snippet from your agent's config (with
+        secrets redacted). E.g. claude_desktop_config.json,
+        .vscode/mcp.json, your .mcp.json, etc.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt(s) you tested
+      description: |
+        Paste the user-side prompt(s) you sent to the agent. Bonus
+        points if you tried our [sample prompts](https://github.com/jmpijll/unifi-code-mode-mcp/blob/main/examples/unifi-expert-agent/SAMPLE_PROMPTS.md).
+      placeholder: |
+        "List every camera on console abc123 and report its model and firmware."
+    validations:
+      required: true
+
+  - type: textarea
+    id: transcript
+    attributes:
+      label: Transcript / output
+      description: |
+        Sanitized output from the agent. Redact: API keys, MAC
+        addresses, real device names, IPs.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: friction
+    attributes:
+      label: Friction points
+      description: |
+        Anything we should fix or document differently? Is there a
+        platform-specific gotcha you'd warn the next person about?
+
+  - type: checkboxes
+    id: surfaces
+    attributes:
+      label: Which surfaces did you exercise?
+      options:
+        - label: "unifi.local.network.*"
+        - label: "unifi.local.protect.*"
+        - label: "unifi.cloud.* (Site Manager)"
+        - label: "unifi.cloud.network(consoleId)"
+        - label: "unifi.cloud.protect(consoleId)"
+        - label: "search tool"
+        - label: "Multi-tenant headers (X-Unifi-* per request)"
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have redacted secrets, MACs, IPs, and PII
+          required: true
+        - label: I read [README's project status](https://github.com/jmpijll/unifi-code-mode-mcp#project-status) and the [install guide](https://github.com/jmpijll/unifi-code-mode-mcp/blob/main/examples/unifi-expert-agent/install.md) before filing
+          required: true

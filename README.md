@@ -2,6 +2,28 @@
 
 [![CI](https://github.com/jmpijll/unifi-code-mode-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jmpijll/unifi-code-mode-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)](#project-status)
+[![Version: v0.2.0-beta.1](https://img.shields.io/badge/version-v0.2.0--beta.1-blue.svg)](CHANGELOG.md)
+
+> ## Project status
+>
+> **This is a public beta. Install from source. Not on npm yet.**
+>
+> Five sandbox surfaces are wired and tested against an in-process mock
+> controller (98/98 unit + integration tests green). Two surfaces are
+> additionally verified live against a real UDM-Pro:
+> `unifi.cloud.network()` and `unifi.cloud.protect(consoleId)`.
+> End-to-end LLM-mediated invocation is verified through two clients:
+> Cursor's `cursor-agent` (Claude Sonnet 4.6) and `opencode` (DeepSeek
+> v4 Flash). Direct-local Protect, Protect mutations, binary surfaces,
+> and every other agent platform (Claude Code, Claude Desktop, VS Code +
+> Copilot, Codex CLI, Continue, Cline, MCP Inspector, …) are wired but
+> **NOT verified by us**. We need testers — please file
+> [verification reports](.github/ISSUE_TEMPLATE/verification_report.yml)
+> and [bug reports](.github/ISSUE_TEMPLATE/bug_report.yml) with whatever
+> you find. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the rules and
+> [`examples/unifi-expert-agent/`](examples/unifi-expert-agent/) for a
+> ready-made persona + cross-platform install snippets.
 
 A Model Context Protocol (MCP) server for the **Ubiquiti UniFi Network Integration API** and the **UniFi Site Manager (cloud) API**, built on the **Cloudflare "Code Mode" pattern**: instead of one MCP tool per endpoint, the server exposes **two tools** — `search` and `execute` — and the LLM writes JavaScript that runs in a QuickJS WASM sandbox. This keeps the LLM context small (~constant) regardless of how big the underlying API is.
 

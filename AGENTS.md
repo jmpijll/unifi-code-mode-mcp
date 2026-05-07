@@ -5,9 +5,18 @@ Network Integration API and the Site Manager (cloud) API. **Read this whole
 file before making changes** — it captures the architectural invariants and
 the lessons we paid for during the initial build.
 
-> If you are an MCP **client** trying to *use* the running server (rather
-> than develop it), read `docs/usage.md` and (when present) `SKILL.md`
-> instead. This file is for contributors editing the server itself.
+> ## Audience disambiguation
+>
+> There are three different "agent docs" in this repo. Make sure you're reading the right one:
+>
+> | If you are… | Read |
+> |---|---|
+> | Editing the server's source code | **This file** + `CONTRIBUTING.md` |
+> | An MCP client driving the *running* server | `SKILL.md` (operating manual) + `docs/usage.md` |
+> | Wiring this MCP into your own agent and want a "UniFi expert" persona | [`examples/unifi-expert-agent/`](examples/unifi-expert-agent/) |
+>
+> This file (the root `AGENTS.md`) is **for contributors editing the
+> server itself**. It is not a system prompt and not a recipe book.
 
 ---
 

@@ -1,0 +1,76 @@
+name: Feature request
+description: Add a new capability or surface to the MCP server.
+title: "[feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. The strongest feature requests cite
+        the underlying UniFi API operation we'd be wrapping (path +
+        method) and explain the use case.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem you're trying to solve?
+      placeholder: |
+        "I want my agent to disable a camera's microphone when motion
+        is detected after hours, but `unifi.local.protect.*` doesn't
+        expose a `disableMic` op."
+    validations:
+      required: true
+
+  - type: textarea
+    id: api
+    attributes:
+      label: Underlying UniFi operation
+      description: |
+        Path, method, and link to the official docs page. If it's an
+        operation our spec loader already knows about but exposes
+        under an ugly name, just cite the synthesized operationId.
+      placeholder: |
+        POST /v1/cameras/{id}/disable-mic
+        https://developer.ui.com/protect/v7.0.107/cameras/disable-mic
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which sandbox surface
+      options:
+        - "unifi.local.network"
+        - "unifi.local.protect"
+        - "unifi.cloud (Site Manager native)"
+        - "unifi.cloud.network(consoleId)"
+        - "unifi.cloud.protect(consoleId)"
+        - "search tool ergonomics"
+        - "execute tool ergonomics"
+        - "MCP transport / multi-tenant"
+        - "Cloudflare Workers entry"
+        - "New surface entirely"
+    validations:
+      required: true
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: Proposed call shape (optional)
+      description: How you'd ideally invoke this from inside `execute`.
+      render: javascript
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and didn't find this
+          required: true
+        - label: This is something the UniFi API actually supports today (not a request to Ubiquiti)
+          required: true

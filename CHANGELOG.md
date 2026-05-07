@@ -5,12 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] — 2026-05-07
+## [Unreleased]
 
-First tagged release. Five sandbox surfaces, live-verified against the
-maintainer's UDM-Pro for both the cloud-Network and cloud-Protect paths,
-and end-to-end LLM-mediated invocation verified through two clients
-(Cursor's `cursor-agent` interactive PTY mode + opencode `--pure run`).
+(no changes yet)
+
+## [0.2.0-beta.1] — 2026-05-07
+
+**Public beta.** Not published to npm; install from source for now (see
+README "Quickstart"). The package is intentionally `"private": true` in
+`package.json` to make accidental publishes impossible. We'll lift that
+when the surface is fully live-verified and we tag `1.0.0`.
+
+Five sandbox surfaces, live-verified against the maintainer's UDM-Pro
+for both the cloud-Network and cloud-Protect paths, and end-to-end
+LLM-mediated invocation verified through two clients (Cursor's
+`cursor-agent` interactive PTY mode + opencode `--pure run`). Direct
+local Protect, mutation operations, and other agent platforms (Claude
+Code, Claude Desktop, VS Code + Copilot, Codex CLI, Continue, Cline,
+MCP Inspector, …) are unverified — see [`SECURITY.md`](SECURITY.md)
+and [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to report what you
+find.
 
 ### Added
 
@@ -176,4 +190,5 @@ and end-to-end LLM-mediated invocation verified through two clients
 - Broader client validation — confirmed working configs for Claude
   Desktop, Continue, Cline, Aider, Zed, and the MCP Inspector UI
 
-[0.2.0]: https://github.com/jmpijll/unifi-code-mode-mcp/releases/tag/v0.2.0
+[Unreleased]: https://github.com/jmpijll/unifi-code-mode-mcp/compare/v0.2.0-beta.1...HEAD
+[0.2.0-beta.1]: https://github.com/jmpijll/unifi-code-mode-mcp/releases/tag/v0.2.0-beta.1
