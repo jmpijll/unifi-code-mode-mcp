@@ -27,17 +27,17 @@
  * NOTE: re-creating an RTSPS stream issues a NEW token. The old URL
  * in the prior GET response is cosmetically replaced. Any external
  * consumer (Home Assistant, NVR backup, etc.) caching the old URL
- * will need to refresh. Tuin is DISCONNECTED so this is a no-op for
- * any live consumer.
+ * will need to refresh. Pick a DISCONNECTED camera so this is a
+ * no-op for any live consumer.
  *
  * Usage:
- *   UNIFI_LOCAL_BASE_URL=https://172.27.1.1 \
+ *   UNIFI_LOCAL_BASE_URL=https://<your-controller> \
  *     UNIFI_LOCAL_INSECURE=true \
- *     OP_LOCAL_REF='op://AI Agents/Unifi local api key/password' \
+ *     OP_LOCAL_REF='op://<vault>/<item>/password' \
  *     npx tsx scripts/verify-mutations-rtsps.ts <cameraId>
  *
- * Defaults to the DISCONNECTED "Tuin" camera id from the maintainer's
- * homelab if no cameraId is passed.
+ * The camera id is required (either as the first argv or via the
+ * UNIFI_CAMERA_ID env var) — the script will not run without one.
  */
 
 import { execSync } from 'node:child_process';
@@ -49,7 +49,17 @@ import { buildContextFromEnv } from '../src/tenant/context.js';
 const OP_LOCAL_REF =
   process.env['OP_LOCAL_REF'] ?? 'op://AI Agents/Unifi local api key/password';
 
-const cameraId = process.argv[2] ?? '<camera-id>';
+function requireCameraId(): string {
+  const v = process.argv[2] ?? process.env['UNIFI_CAMERA_ID'];
+  if (typeof v !== 'string' || v.length === 0) {
+    console.error(
+      '[verify-mutations-rtsps] cameraId is required: pass as argv[2] or set UNIFI_CAMERA_ID. Pick a DISCONNECTED camera.',
+    );
+    process.exit(2);
+  }
+  return v;
+}
+const cameraId = requireCameraId();
 
 interface RtspsState {
   high: string | null;

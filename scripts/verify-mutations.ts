@@ -28,13 +28,15 @@
  * out/verification/mutation-live-smoke.txt for the disclosure.
  *
  * Usage:
- *   UNIFI_LOCAL_BASE_URL=https://172.27.1.1 \
+ *   UNIFI_LOCAL_BASE_URL=https://<your-controller> \
  *     UNIFI_LOCAL_INSECURE=true \
- *     OP_LOCAL_REF='op://AI Agents/Unifi local api key/password' \
+ *     OP_LOCAL_REF='op://<vault>/<item>/password' \
  *     npx tsx scripts/verify-mutations.ts <cameraId>
  *
- * Defaults to the DISCONNECTED "Tuin" camera id from the maintainer's
- * homelab if no cameraId is passed.
+ * The camera id is required (either as the first argv or via the
+ * UNIFI_CAMERA_ID env var) — the script will not run without one.
+ * Pick a DISCONNECTED camera; the pre-flight check refuses to mutate
+ * anything else.
  */
 
 import { execSync } from 'node:child_process';
@@ -47,7 +49,17 @@ const OP_LOCAL_REF =
   process.env['OP_LOCAL_REF'] ?? 'op://AI Agents/Unifi local api key/password';
 const TEST_PREFIX = 'MCP-VERIFY-';
 
-const cameraId = process.argv[2] ?? '<camera-id>';
+function requireCameraId(): string {
+  const v = process.argv[2] ?? process.env['UNIFI_CAMERA_ID'];
+  if (typeof v !== 'string' || v.length === 0) {
+    console.error(
+      '[verify-mutations] cameraId is required: pass as argv[2] or set UNIFI_CAMERA_ID. Pick a DISCONNECTED camera.',
+    );
+    process.exit(2);
+  }
+  return v;
+}
+const cameraId = requireCameraId();
 
 function getKey(): string {
   const fromEnv = process.env['UNIFI_LOCAL_API_KEY'];
