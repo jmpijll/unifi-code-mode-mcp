@@ -28,16 +28,16 @@ A `git filter-repo` history rewrite was applied immediately after the
 public visibility flip to scrub three PII vectors that had slipped into
 git history while the repo was still private:
 
-1. The author's personal Hotmail address (`jmpijll@users.noreply.github.com`)
-   in `package.json` and in 23 historical commit Author headers — all
-   replaced with `jmpijll@users.noreply.github.com`.
-2. An absolute home-directory path (`/path/to/unifi-code-mode-mcp`)
-   that survived in commit `897b5e8`'s body of
-   `out/verification/cursor-agent-sonnet-mcp-call.txt` — replaced with
+1. A personal Hotmail address that had been the maintainer's git
+   `user.email` early in the project, in `package.json` and in 23
+   historical commit Author headers — all replaced with
+   `jmpijll@users.noreply.github.com` (the GitHub-issued noreply form).
+2. An absolute home-directory path of the form `/Users/<username>/<repo>`
+   that survived in one verification transcript blob — replaced with
    `/path/to/unifi-code-mode-mcp` everywhere.
-3. The maintainer's "Tuin" camera id (`<camera-id>`)
-   hardcoded as a default in `scripts/verify-mutations*.ts` —
-   replaced with the literal `<camera-id>` placeholder in history.
+3. A Mongo-style hex id for one of the maintainer's homelab cameras,
+   hardcoded as a default in `scripts/verify-mutations*.ts` — replaced
+   with the literal `<camera-id>` placeholder in history.
 
 All commit hashes from before the rewrite are now invalid. If you
 cloned the repo during the ~30-minute window between the public flip
