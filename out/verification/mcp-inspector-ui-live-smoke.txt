@@ -1,0 +1,128 @@
+================================================================================
+MCP INSPECTOR UI MODE LIVE SMOKE TEST — UDM-Pro running Network 10.3.58
+Recorded: 2026-05-07 20:36 CEST (18:36 UTC)
+Tool:     @modelcontextprotocol/inspector v0.20.0 (UI / browser mode)
+Server:   node dist/index.js (stdio transport)
+================================================================================
+
+WHAT THIS PROVES
+  ✓ The official MCP Inspector UI mode (the browser-based debugger,
+    not just `--cli`) loads our server cleanly. The form fills with
+    `node` + `/path/to/dist/index.js` + UNIFI_LOCAL_* env vars
+    forwarded automatically from the launch command (-e flags).
+  ✓ Clicking "Connect" succeeds — Inspector shows green
+    "Connected", and the History pane records `1. initialize`.
+  ✓ Clicking "List Tools" returns both `search` and `execute` with
+    full descriptors. Inspector renders the tool descriptions
+    correctly in the right-hand panel.
+  ✓ Selecting `execute` reveals a populated form:
+      - `code *` textarea with placeholder
+        "JavaScript code to execute against the live UniFi APIs.
+         Use await — operations are async."
+      - "Run as task" checkbox
+      - "Run Tool" button
+  ✓ Pasting `var s = unifi.local.callOperation('getSiteOverviewPage');
+    ({ siteCount: s.data.length, names: s.data.map(function(x){return x.name;}) });`
+    into the code field and clicking "Run Tool" returns
+    "Tool Result: Success" and the response object {siteCount: 1,
+    names: [...]}. The TLS-insecure warning surfaces in the result
+    body just like in CLI mode.
+  ✓ History pane records `3. tools/call` after the execute, alongside
+    the prior `2. tools/list` and `1. initialize`. Server Notifications
+    pane records the corresponding stderr/log notifications from the
+    server.
+  ✓ Every visible UI affordance round-trips JSON-RPC over the
+    stdio-bridged proxy correctly. The UI is the same protocol as
+    CLI; the artefact closes the gap that previously read
+    "Inspector UI mode unverified".
+
+WHAT THIS DOES NOT PROVE
+  ✗ HTTP / SSE transports inside the Inspector UI. We verified stdio
+    only (which is the default and most common transport). The UI's
+    Transport Type combobox offers SSE/HTTP, but those code paths
+    are not exercised here.
+  ✗ Long-running soak — the smoke is a single tools/list + single
+    tools/call. Memory or session-stability under sustained UI use
+    is unverified.
+  ✗ Cross-platform browser variation. We drove the UI through
+    Cursor's headless cursor-ide-browser MCP. Real users on Safari
+    / Firefox / Edge / Chrome are unverified.
+  ✗ Inspector v0.21.x. Pinned to v0.20.0 because v0.21.2 has the
+    known missing-`commander` dependency error on Node v25 (see
+    `out/verification/mcp-inspector-live-smoke.txt` for context).
+
+INSPECTOR LAUNCH COMMAND
+  $ npx -y @modelcontextprotocol/inspector@0.20.0 \
+        -e UNIFI_LOCAL_BASE_URL="$UNIFI_LOCAL_BASE_URL" \
+        -e UNIFI_LOCAL_API_KEY="$UNIFI_LOCAL_API_KEY" \
+        -e UNIFI_LOCAL_INSECURE=true \
+        -- node /path/to/unifi-code-mode-mcp/dist/index.js
+
+  Output:
+    Starting MCP inspector...
+    ⚙️ Proxy server listening on localhost:6277
+    🔑 Session token: <redacted>
+    🚀 MCP Inspector is up and running at:
+       http://localhost:6274/?MCP_PROXY_AUTH_TOKEN=<redacted>
+    🌐 Opening browser...
+
+UI INTERACTION SUMMARY
+  1. Page loaded at http://localhost:6274/?MCP_PROXY_AUTH_TOKEN=...
+  2. The form auto-populated `node` in the Command field; we filled
+     `/path/to/unifi-code-mode-mcp/dist/index.js` into Arguments.
+  3. The Environment Variables section auto-populated UNIFI_LOCAL_*
+     entries from the -e flags (HOME/PATH/SHELL/etc. forwarded by
+     default; tenant credentials forwarded explicitly).
+  4. Clicked "Connect" → Inspector handshake succeeded.
+     History: `1. initialize ▶`
+  5. Clicked "List Tools" → both tools listed in left-hand Tools
+     panel: `search` ("Search the UniFi OpenA...") and `execute`
+     ("Run UniFi API calls by..."). History: `2. tools/list ▶`.
+  6. Clicked `execute` in the Tools panel → right pane filled with
+     the execute tool description and a `code *` form.
+  7. Pasted the test code (one-liner that calls
+     `getSiteOverviewPage` and projects siteCount + names) into the
+     code field.
+  8. Clicked "Run Tool" → button transitioned to "Running…" then
+     back to "Run Tool". The result section rendered:
+        Tool Result: Success
+        --- Warning ---
+        [warn] [unifi.local] TLS verification disabled (insecure mode).
+               Provide a custom CA bundle in production.
+        { siteCount: 1, names: ["Default"] }
+     History: `3. tools/call ▶`.
+
+SCREENSHOTS (in this directory)
+  - mcp-inspector-ui-tools-list.png       — connected state,
+                                            tools/list result
+                                            populated in Tools panel
+  - mcp-inspector-ui-execute-success.png  — execute form filled,
+                                            "Tool Result: Success",
+                                            History showing all
+                                            three JSON-RPC calls
+
+PROBE METADATA
+  Controller:    UDM-Pro on UniFi OS, Network 10.3.58
+                 (LAN-direct, RFC1918 homelab IP)
+  Surface:       unifi.local.* (NOT cloud)
+  Spec:          UniFi Network Integration API v10.1.84 (67 ops),
+                 cache hit on src/spec/cache/local-v10.1.84.json
+  TLS:           UNIFI_LOCAL_INSECURE=true (UDM self-signed)
+  Inspector:     v0.20.0 (pinned; v0.21.2 has unrelated commander
+                 bug on Node v25)
+  Browser:       Cursor's headless cursor-ide-browser MCP
+                 (Chromium-based, viewport 1600×1000)
+
+REPRODUCER
+  $ # in the project root, after npm run build:
+  $ export UNIFI_LOCAL_BASE_URL=https://<controller>
+  $ export UNIFI_LOCAL_API_KEY=$(op read 'op://AI Agents/Unifi local api key/password')
+  $ export UNIFI_LOCAL_INSECURE=true
+  $ npx -y @modelcontextprotocol/inspector@0.20.0 \
+        -e UNIFI_LOCAL_BASE_URL="$UNIFI_LOCAL_BASE_URL" \
+        -e UNIFI_LOCAL_API_KEY="$UNIFI_LOCAL_API_KEY" \
+        -e UNIFI_LOCAL_INSECURE="$UNIFI_LOCAL_INSECURE" \
+        -- node "$(pwd)/dist/index.js"
+  # browser opens automatically; click Connect → List Tools →
+  # select execute → paste the code above → Run Tool.
+================================================================================

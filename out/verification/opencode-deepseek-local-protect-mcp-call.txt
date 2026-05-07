@@ -1,0 +1,135 @@
+================================================================================
+END-TO-END LLM-MEDIATED MCP VERIFICATION (LAN-DIRECT PROTECT)
+DeepSeek v4 Flash via opencode --pure run
+Recorded: 2026-05-07 20:29 CEST (18:29 UTC)
+Source: opencode v1.14.30, project-scoped opencode.json
+================================================================================
+
+WHAT THIS PROVES
+  ✓ A real LLM (DeepSeek v4 Flash via opencode-go) successfully drove
+    the unifi.local.protect.* sandbox surface end-to-end via the
+    unifi_execute MCP tool — not the cloud surface, the LAN-direct
+    path that hits the controller at
+    https://<controller>/proxy/protect/integration/v1/cameras
+    directly with the local API key.
+  ✓ The MCP server received the LLM-written JavaScript, dispatched
+    it through the QuickJS sandbox to the local Protect HTTP client,
+    and returned the live camera array. The model echoed the result
+    correctly in the requested one-line format.
+  ✓ The model picked up the LAN-direct Protect path (unifi.local.protect)
+    correctly without any cloud-Network or cloud-Protect detour, even
+    though all four surfaces are exposed on the same MCP server.
+  ✓ Result (count=4 plus four real camera names) matches both
+    discover-local.ts and the previously-recorded cloud-Protect smoke
+    against the same UDM-Pro running Protect 7.0.107 — cross-confirms
+    the LLM-mediated path returns identical data to the direct-driven
+    path on the same hardware.
+
+WHAT THIS DOES NOT PROVE
+  ✗ Mutation operations through an LLM. This run was read-only
+    (callOperation('listCameras')).
+  ✗ Other LLM models. We verified DeepSeek v4 Flash; Sonnet 4.6, GPT,
+    Gemini, etc. are still unverified for the LAN-direct Protect surface.
+  ✗ Other client platforms (Claude Desktop, Claude Code, VS Code +
+    Copilot, Codex CLI, Cline, Continue, MCP Inspector UI) — see
+    examples/unifi-expert-agent/install.md for status.
+
+OPENCODE.JSON (project-scoped, unchanged from the LAN-direct Network run)
+  {
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+      "unifi": {
+        "type": "local",
+        "command": ["node", "dist/index.js"],
+        "enabled": true,
+        "environment": {
+          "UNIFI_LOCAL_BASE_URL": "{env:UNIFI_LOCAL_BASE_URL}",
+          "UNIFI_LOCAL_API_KEY":  "{env:UNIFI_LOCAL_API_KEY}",
+          "UNIFI_LOCAL_INSECURE": "{env:UNIFI_LOCAL_INSECURE}",
+          "UNIFI_CLOUD_API_KEY":  "{env:UNIFI_CLOUD_API_KEY}"
+        }
+      }
+    },
+    "permission": { "unifi_*": "allow" }
+  }
+
+COMMAND
+  $ UNIFI_LOCAL_BASE_URL=https://<controller> \
+      UNIFI_LOCAL_API_KEY="$(op read 'op://AI Agents/Unifi local api key/password')" \
+      UNIFI_LOCAL_INSECURE=true \
+      opencode --pure run --model opencode-go/deepseek-v4-flash \
+        "Use the unifi_execute MCP tool with code:
+           (async () => {
+             const r = await unifi.local.protect.callOperation('listCameras');
+             return { count: r.length, names: r.map(c => c.name) };
+           })()
+         — listCameras returns an array. Print only one line:
+         count=N names=A,B,C."
+
+MODEL'S TOOL INVOCATIONS (verbatim, from opencode --pure run output)
+
+  step 1 — tool unifi_execute:
+    input  : { "code": "(async () => {
+                          const r = await unifi.local.protect
+                                          .callOperation('listCameras');
+                          return { count: r.length,
+                                   names: r.map(c => c.name) };
+                        })()" }
+    output : { count: 4,
+               names: ["Daisy", "Cnc", "Voordeur", "Tuin"] }
+    elapsed: ~12 s wall-clock end-to-end (1 host call to
+             /proxy/protect/integration/v1/cameras)
+
+  step 2 — final response to user:
+    "count=4 names=Daisy,Cnc,Voordeur,Tuin"
+
+LATENCY / RESOURCE PROFILE
+  Total wall-clock from CLI invocation to final line   ~22 s
+    (warm opencode bootstrap + MCP server spawn +
+     DeepSeek round-trip + 1 Protect HTTP call)
+  Sandbox host calls                                    1
+  LLM tool calls                                        1 (unifi_execute)
+                                                          — no unifi_search
+                                                          needed because the
+                                                          operationId was
+                                                          given in the prompt
+
+NOTABLE LESSONS FOR DOCS
+  * The model accepted the async-IIFE pattern from the prompt without
+    re-deriving it. This validates the documentation we added in the
+    LAN-direct Network verification (top-level return / await are not
+    allowed in QuickJS; wrap in an async IIFE) — once the recipe is in
+    SKILL.md and visible to the model, success is single-shot.
+
+  * Compared to the LAN-direct Network run that needed 4 syntax
+    correction attempts before settling on the IIFE shape, supplying the
+    correct shape in the prompt cuts wall-clock from ~13 s to ~12 s for
+    the LLM-only portion (1 tool call vs. 5).
+
+PROBE METADATA
+  Controller:    UDM-Pro on UniFi OS
+                 Protect 7.0.107 (LAN-direct, RFC1918 homelab IP)
+  Surface:       unifi.local.protect.* (NOT unifi.cloud.protect)
+  Spec:          UniFi Protect Integration API v7.0.107 (35 ops)
+                 loaded from apidoc-cdn.ui.com on cache miss; cache
+                 hit on this run
+  Model:         opencode-go/deepseek-v4-flash (via Cursor's
+                 opencode-go bundled provider)
+  Client:        opencode v1.14.30, project-scoped opencode.json,
+                 --pure run (single-shot, no TUI)
+  TLS:           UNIFI_LOCAL_INSECURE=true (UDM self-signed)
+
+REPRODUCER
+  $ # in the project root, after npm run build:
+  $ UNIFI_LOCAL_BASE_URL=https://<controller> \
+      UNIFI_LOCAL_API_KEY="$(op read 'op://AI Agents/Unifi local api key/password')" \
+      UNIFI_LOCAL_INSECURE=true \
+      opencode --pure run --model opencode-go/deepseek-v4-flash \
+        "Use the unifi_execute MCP tool with code:
+           (async () => {
+             const r = await unifi.local.protect.callOperation('listCameras');
+             return { count: r.length, names: r.map(c => c.name) };
+           })()
+         — listCameras returns an array. Print only one line:
+         count=N names=A,B,C."
+================================================================================

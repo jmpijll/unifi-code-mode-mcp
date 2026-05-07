@@ -11,8 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [22.x]
+        node-version: [20.x, 22.x]
     steps:
       - uses: actions/checkout@v4
 
@@ -31,8 +32,24 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Format check (non-blocking)
+        run: npm run format:check
+        continue-on-error: true
+
       - name: Test
         run: npm test
 
       - name: Build
         run: npm run build
+
+      - name: Smoke — tools/list against built dist (via MCP Inspector CLI)
+        run: |
+          set -euo pipefail
+          OUT=$(npx -y @modelcontextprotocol/inspector@0.20.0 \
+            --cli node dist/index.js --method tools/list)
+          echo "$OUT" | head -c 4000
+          echo "$OUT" | grep -q '"name": "search"' \
+            || (echo "FAIL: 'search' tool not in tools/list" >&2; exit 1)
+          echo "$OUT" | grep -q '"name": "execute"' \
+            || (echo "FAIL: 'execute' tool not in tools/list" >&2; exit 1)
+          echo "OK: both 'search' and 'execute' tools exposed by dist/index.js"

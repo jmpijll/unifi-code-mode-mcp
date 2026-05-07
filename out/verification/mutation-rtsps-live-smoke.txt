@@ -1,0 +1,91 @@
+================================================================================
+LIVE PROTECT MUTATION ROUND-TRIP — RTSPS STREAM TOGGLE
+unifi.local.protect.* DELETE + POST against a real UDM-Pro
+Recorded: 2026-05-07 20:30 CEST (18:30 UTC)
+Source: scripts/verify-mutations-rtsps.ts
+================================================================================
+
+WHAT THIS PROVES
+  ✓ A second mutation operation type — separate from camera rename —
+    works through the unifi.local.protect.* sandbox surface against
+    real hardware. Specifically, the DELETE + POST pattern with array-
+    style query params (?qualities=high) and array-bodied creates
+    ({qualities: ['high']}).
+  ✓ The HttpClient buildQueryString() correctly serialises array
+    query parameters as repeated keys, matching what the Protect
+    Integration API expects.
+  ✓ Self-reverting mutation pattern works for non-PATCH operations
+    (DELETE then POST), not just rename PATCHes. Three sequential
+    ExecuteExecutor invocations (one per phase: pre-flight, mutate,
+    revert) keep the QuickJS sandbox lifetimes clean.
+  ✓ Pre-flight guards refuse to run unless the camera is DISCONNECTED
+    AND its rtsps state is exactly "high enabled, others null". This
+    is the canonical homelab Tuin state — anything else (medium/low/
+    package enabled, or all null) means a human has been managing
+    this camera and we should not touch it.
+
+WHAT THIS DOES NOT PROVE
+  ✗ Token-stable revert. Re-creating an RTSPS stream issues a new
+    URL token; the old URL is permanently invalidated. Acceptable
+    here because Tuin is DISCONNECTED so no live consumer is caching
+    the old URL. The script logs "high token rotated: true" to make
+    this explicit.
+  ✗ Other RTSPS quality levels (medium, low, package). Only "high"
+    was toggled. Multi-quality bodies are wired the same way but
+    not exercised here.
+  ✗ Operations against a CONNECTED camera. Out of scope for safety.
+
+PROBE METADATA
+  Controller:    UDM-Pro on UniFi OS, Protect 7.0.107
+                 (LAN-direct, RFC1918 homelab IP)
+  Surface:       unifi.local.protect.* (NOT cloud)
+  Spec:          UniFi Protect Integration API v7.0.107 (35 ops),
+                 cache hit on src/spec/cache/protect-v7.0.107.json
+  Camera:        "Tuin", state=DISCONNECTED, modelKey=camera,
+                 featurePtz=false (homelab has no PTZ-capable
+                 cameras — PTZ verification deferred)
+  TLS:           UNIFI_LOCAL_INSECURE=true (UDM self-signed)
+
+COMMAND
+  $ UNIFI_LOCAL_BASE_URL=https://<controller> \
+      UNIFI_LOCAL_API_KEY="$(op read 'op://AI Agents/Unifi local api key/password')" \
+      UNIFI_LOCAL_INSECURE=true \
+      npx tsx scripts/verify-mutations-rtsps.ts
+
+OUTPUT (verbatim from the live run, IPs preserved as RFC1918)
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [verify-mutations-rtsps] target https://<controller>, camera <camera-id>
+  [verify-mutations-rtsps] protect spec UniFi Protect Integration API v0.0.0 (35 ops)
+  [verify-mutations-rtsps] PRE  : id=<camera-id> name="Tuin" state=DISCONNECTED rtsps=high
+  [verify-mutations-rtsps] MUTATE: DELETE /v1/cameras/<camera-id>/rtsps-stream?qualities=high
+  [verify-mutations-rtsps] MID  : rtsps=<all null> (high=null)
+  [verify-mutations-rtsps] REVERT: POST /v1/cameras/<camera-id>/rtsps-stream body={qualities:['high']}
+  [verify-mutations-rtsps] POST : rtsps=high (high token rotated: true)
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [verify-mutations-rtsps] ✓ SUCCESS — round-trip complete, "high" RTSPS stream restored (with new token)
+
+LATENCY
+  Wall-clock end-to-end: ~24 s (3 sandbox invocations + 4 host calls
+  to the local Protect API; spec cold-cache miss on the first run,
+  cache hit on subsequent runs).
+
+GAPS (not verified, with reasons)
+
+  ✗ PTZ goto + return-to-home (POST /v1/cameras/{id}/ptz/goto/{slot}).
+    None of the 4 cameras in the maintainer's homelab is PTZ-capable
+    (probed via featureFlags — `canPtz` is absent from all four
+    feature-flag dictionaries). Verification deferred until a tester
+    runs this against PTZ hardware (e.g. UniFi G4 PTZ).
+
+  ✗ Alarm-manager webhook trigger
+    (POST /v1/alarm-manager/webhook/{id}). Requires an alarm to be
+    pre-configured in the Protect UI with the matching ID. The
+    homelab has no such alarm configured, so triggering with any ID
+    is a no-op against the controller. Verification deferred until
+    a tester runs this against an alarm-managed Protect deployment.
+
+  These two gaps are tracked in the README "Verification status"
+  table and CHANGELOG. The mutation script template is portable — a
+  contributor with the right hardware / configuration can copy
+  verify-mutations-rtsps.ts and adapt it.
+================================================================================
