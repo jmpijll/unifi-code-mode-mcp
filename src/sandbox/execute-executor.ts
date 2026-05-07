@@ -241,15 +241,24 @@ export class ExecuteExecutor {
         callBudgetGuard,
       });
 
-      // Build and inject the unifi namespace prelude. The cloud-network proxy
-      // surface is exposed only when both a local Network spec is available
-      // (for operation shapes) and the cloud namespace itself is present.
-      // Protect surfaces are exposed only when the Protect spec is loaded.
+      // Build and inject the unifi namespace prelude. Each surface is gated on
+      // having the spec it needs to derive operations from — credentials are
+      // checked at call time by the host bindings (see bind*Functions below).
+      //
+      //  - exposeCloudNetworkProxy needs the Network (local) spec because the
+      //    proxy reuses Network operation shapes, just routed through the
+      //    /v1/connector/consoles/{id}/proxy/network/integration prefix.
+      //  - exposeLocalProtect / exposeCloudProtectProxy need the Protect spec.
+      //
+      // Notably, neither cloud proxy needs the Site Manager native spec
+      // (cloudSpec) — that spec is for unifi.cloud.<tag>.<op>, not the
+      // proxy factories. Gating on it would make Protect-only and
+      // Network-proxy-only deployments impossible.
       const prelude = buildUnifiPrelude(this.localSpec, this.cloudSpec, {
-        exposeCloudNetworkProxy: Boolean(this.localSpec) && Boolean(this.cloudSpec),
+        exposeCloudNetworkProxy: Boolean(this.localSpec),
         protectSpec: this.protectSpec,
         exposeLocalProtect: Boolean(this.protectSpec),
-        exposeCloudProtectProxy: Boolean(this.protectSpec) && Boolean(this.cloudSpec),
+        exposeCloudProtectProxy: Boolean(this.protectSpec),
       });
       const preludeResult = context.evalCode(prelude, 'prelude.js', { type: 'global' });
       if (preludeResult.error) {
@@ -479,7 +488,7 @@ function bindCloudNetworkProxyFunctions(
           );
         }
         const client = binding.getCloudNetworkClient(consoleId);
-        const response = await dispatchOperation(client, spec, 'local', opId, args);
+        const response = await dispatchOperation(client, spec, 'cloud.network', opId, args);
         return jsonResponseToHandle(context, response.data);
       } catch (err) {
         throw new Error(formatCloudNetworkError(err));
@@ -548,9 +557,7 @@ function bindLocalProtectFunctions(
         const spec = binding.getSpec();
         if (!spec) throw new Error('unifi.local.protect: spec not loaded');
         const client = binding.getClient();
-        // Reuse the local-namespace dispatch — the Protect spec is shaped
-        // identically to Network's, only the operation set differs.
-        const response = await dispatchOperation(client, spec, 'local', opId, args);
+        const response = await dispatchOperation(client, spec, 'local.protect', opId, args);
         return jsonResponseToHandle(context, response.data);
       } catch (err) {
         throw new Error(formatLocalProtectError(err));
@@ -612,7 +619,7 @@ function bindCloudProtectProxyFunctions(
           );
         }
         const client = binding.getClient(consoleId);
-        const response = await dispatchOperation(client, spec, 'local', opId, args);
+        const response = await dispatchOperation(client, spec, 'cloud.protect', opId, args);
         return jsonResponseToHandle(context, response.data);
       } catch (err) {
         throw new Error(formatCloudProtectError(err));

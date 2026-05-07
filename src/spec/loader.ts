@@ -250,18 +250,25 @@ export async function loadProtectSpec(
 
   let discoveredVersion: string | undefined;
   if (!opts.specUrlOverride && opts.baseUrl) {
-    try {
-      discoveredVersion = await fetchProtectAppVersion(
-        opts.baseUrl,
-        opts.apiKey,
-        dispatcher,
-      );
-    } catch (err) {
-      onWarn(
-        `Could not discover Protect version from ${opts.baseUrl}: ` +
-          `${err instanceof Error ? err.message : String(err)}. ` +
-          'Falling back to known-version ladder.',
-      );
+    // Version discovery only works against a local controller — the cloud
+    // connector requires a per-request consoleId we don't have here. For
+    // api.ui.com baseUrls, skip the probe and rely on the known-version
+    // ladder (the loader's other candidates).
+    const isCloudBase = /(^|\/\/)api\.ui\.com(\/|$)/i.test(opts.baseUrl);
+    if (!isCloudBase) {
+      try {
+        discoveredVersion = await fetchProtectAppVersion(
+          opts.baseUrl,
+          opts.apiKey,
+          dispatcher,
+        );
+      } catch (err) {
+        onWarn(
+          `Could not discover Protect version from ${opts.baseUrl}: ` +
+            `${err instanceof Error ? err.message : String(err)}. ` +
+            'Falling back to known-version ladder.',
+        );
+      }
     }
   }
 
