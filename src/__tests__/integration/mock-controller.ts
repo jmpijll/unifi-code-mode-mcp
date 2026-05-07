@@ -14,6 +14,11 @@ import {
   FIREWALL_ZONES_LEGACY_ERROR,
   INFO,
   NETWORKS_PAGE,
+  PROTECT_CAMERAS_PAGE,
+  PROTECT_CAMERA_FRONT,
+  PROTECT_CAMERA_FRONT_ID,
+  PROTECT_META_INFO,
+  PROTECT_NVRS_PAGE,
   SITES_PAGE,
   SITE_ID,
   WANS_PAGE,
@@ -78,7 +83,13 @@ async function handle(
     return;
   }
 
-  // The MCP host calls /proxy/network/integration/<...>; strip the prefix.
+  // The MCP host calls either /proxy/network/integration/<...> (Network)
+  // or /proxy/protect/integration/<...> (Protect); route accordingly.
+  if (path.startsWith('/proxy/protect/integration')) {
+    handleProtect(method, path.slice('/proxy/protect/integration'.length), body, res);
+    return;
+  }
+
   const apiPath = path.startsWith('/proxy/network/integration')
     ? path.slice('/proxy/network/integration'.length)
     : path;
@@ -122,6 +133,39 @@ async function handle(
       json(res, 404, {
         code: 'api.notfound',
         message: `No mock route for ${method} ${apiPath}`,
+      });
+  }
+}
+
+function handleProtect(
+  method: string,
+  apiPath: string,
+  body: unknown,
+  res: ServerResponse,
+): void {
+  const route = `${method} ${stripQuery(apiPath)}`;
+  switch (route) {
+    case 'GET /v1/meta/info':
+      json(res, 200, PROTECT_META_INFO);
+      return;
+    case 'GET /v1/cameras':
+      json(res, 200, PROTECT_CAMERAS_PAGE);
+      return;
+    case `GET /v1/cameras/${PROTECT_CAMERA_FRONT_ID}`:
+      json(res, 200, PROTECT_CAMERA_FRONT);
+      return;
+    case 'GET /v1/nvrs':
+      json(res, 200, PROTECT_NVRS_PAGE);
+      return;
+    case `POST /v1/cameras/${PROTECT_CAMERA_FRONT_ID}/ptz/goto/1`:
+      void body; // accept any body shape
+      res.writeHead(204);
+      res.end();
+      return;
+    default:
+      json(res, 404, {
+        code: 'api.notfound',
+        message: `No mock Protect route for ${method} ${apiPath}`,
       });
   }
 }

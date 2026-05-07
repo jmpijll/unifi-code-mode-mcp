@@ -21,16 +21,16 @@ import type { TenantContext } from '../tenant/context.js';
 
 // ─── Tool descriptions ──────────────────────────────────────────────
 
-const SEARCH_TOOL_DESCRIPTION = `Search the UniFi OpenAPI specs (local Network Integration + cloud Site Manager) by writing JavaScript.
+const SEARCH_TOOL_DESCRIPTION = `Search the UniFi OpenAPI specs (local Network Integration, cloud Site Manager, and Protect Integration) by writing JavaScript.
 
 The sandbox is read-only — no network. Use this tool to **discover** what to call before invoking \`execute\`.
 
 ## Globals
 
-- \`spec.local\` and \`spec.cloud\` — each: \`{ title, version, sourceUrl, serverPrefix, operations[] }\`
+- \`spec.local\`, \`spec.cloud\`, and \`spec.protect\` — each: \`{ title, version, sourceUrl, serverPrefix, operations[] }\`
   Operations are compact: \`{ operationId, method, path, tag, summary, parameters, hasRequestBody, deprecated }\`.
-  \`spec.local\` may be \`null\` if no local controller is configured (same for cloud).
-- \`searchOperations(namespace, query, limit?)\` — text-ranked search; namespace is \`"local"\` or \`"cloud"\`.
+  Any namespace may be \`null\` if not configured (no local controller, no cloud key, or Protect not loaded).
+- \`searchOperations(namespace, query, limit?)\` — text-ranked search; namespace is \`"local"\`, \`"cloud"\`, or \`"protect"\`.
 - \`getOperation(namespace, operationId)\` — full operation including spec parameter detail. Pass either an \`operationId\` or \`"METHOD /path"\`.
 - \`findOperationsByPath(namespace, substring)\` — list operations whose path contains the substring (case-insensitive).
 - \`console.log()\` — captured into the tool output.
@@ -55,10 +55,13 @@ getOperation('local', 'listSites');
 
 const EXECUTE_TOOL_DESCRIPTION = `Run UniFi API calls by writing JavaScript that uses the \`unifi\` namespace.
 
-Two namespaces:
+Surfaces:
 
 - \`unifi.local\` — UniFi Network Integration API (per-controller). Available only if local credentials are configured (env or \`X-Unifi-Local-*\` headers).
 - \`unifi.cloud\` — UniFi Site Manager API at \`https://api.ui.com\`. Available only if a cloud key is configured.
+- \`unifi.cloud.network(consoleId)\` — Network Integration API tunneled through the Site Manager connector. Same shape as \`unifi.local\`.
+- \`unifi.local.protect\` — UniFi Protect Integration API on a controller running Protect. Available only when both a Protect spec and local credentials are configured.
+- \`unifi.cloud.protect(consoleId)\` — Protect Integration API tunneled through the Site Manager connector. **UNVERIFIED** against a real Protect deployment; documented for parity with cloud.network.
 
 Each namespace exposes:
 
@@ -106,6 +109,12 @@ export interface CreateServerOptions {
   localSpec?: ProcessedSpec;
   /** Cloud OpenAPI spec, or undefined if not loaded. */
   cloudSpec?: ProcessedSpec;
+  /**
+   * Protect OpenAPI spec, or undefined if not loaded. When present, the
+   * unifi.local.protect.* and unifi.cloud.protect(consoleId).* surfaces
+   * become available in the execute sandbox.
+   */
+  protectSpec?: ProcessedSpec;
   /** Function called per request to obtain the TenantContext. */
   tenantResolver: () => TenantContext | Promise<TenantContext>;
   /** Sandbox limits override. */
@@ -124,6 +133,7 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
   const {
     localSpec,
     cloudSpec,
+    protectSpec,
     tenantResolver,
     limits,
     logger,
@@ -143,6 +153,9 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
         cloudSpec
           ? `unifi.cloud: ${cloudSpec.title} v${cloudSpec.version} — ${String(cloudSpec.operations.length)} operations`
           : 'unifi.cloud: NOT CONFIGURED',
+        protectSpec
+          ? `unifi.*.protect: ${protectSpec.title} v${protectSpec.version} — ${String(protectSpec.operations.length)} operations`
+          : 'unifi.*.protect: NOT CONFIGURED',
         '',
         'Workflow: use `search` to find the operationIds you need, then call them via `execute`.',
       ].join('\n'),
@@ -151,7 +164,11 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
 
   // ── Search tool ─────────────────────────────────────────────────
 
-  const searchExecutor = new SearchExecutor({ local: localSpec, cloud: cloudSpec });
+  const searchExecutor = new SearchExecutor({
+    local: localSpec,
+    cloud: cloudSpec,
+    protect: protectSpec,
+  });
 
   server.registerTool(
     'search',
@@ -215,6 +232,7 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
         tenant,
         localSpec,
         cloudSpec,
+        protectSpec,
         ...(limits ? { limits } : {}),
       });
 

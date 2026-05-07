@@ -38,13 +38,26 @@ backed by a sandboxed JS surface that fans out to two separate UniFi APIs.
 
 1. **Two MCP tools, always.** `search` and `execute`. Adding tools defeats
    the Code Mode pattern.
-2. **Three sandbox surfaces, two real clients.**
+2. **Five sandbox surfaces, three OpenAPI specs, four HTTP clients.**
    - `unifi.local.*` → local controller via the Network Integration API.
    - `unifi.cloud.*` → Site Manager API on `api.ui.com`.
    - `unifi.cloud.network(consoleId).*` → **same operations as
      `unifi.local`**, but routed through the cloud connector
      (`/v1/connector/consoles/{id}/proxy/network/integration`) using the
      **cloud** API key. No local creds needed.
+   - `unifi.local.protect.*` → local controller's Protect Integration API
+     at `/proxy/protect/integration/v1/...`. Uses the **local** API key.
+     The Protect spec ships as a curated ~25-op fallback at
+     `src/spec/protect-fallback.json`; broader specs can be supplied via
+     `UNIFI_PROTECT_SPEC_URL`. **Verified against the mock controller
+     only** — no real-Protect end-to-end yet.
+   - `unifi.cloud.protect(consoleId).*` → Protect Integration API tunneled
+     through the Site Manager connector at
+     `/v1/connector/consoles/{id}/proxy/protect/integration`.
+     **UNVERIFIED** — Ubiquiti has not publicly documented that the
+     connector proxies Protect. Shipped on the assumption it follows the
+     Network connector's pattern; if that assumption breaks, calls return
+     a structured `[unifi.cloud.protect.http]` 404.
 3. **Credentials never enter the sandbox.** They live on the host and are
    looked up from `TenantContext` when the host-side `request()` runs. The
    sandbox sees an opaque `client` handle, never an `apiKey`.
@@ -94,12 +107,15 @@ template for a new operational script.
 
 | Concern | File |
 |---|---|
-| OpenAPI fetch + cache + version fallback | `src/spec/loader.ts` |
+| OpenAPI fetch + cache + version fallback (Network, Cloud, Protect) | `src/spec/loader.ts` |
 | Curated Site Manager fallback schema | `src/spec/cloud-fallback.json` |
+| Curated Protect fallback schema | `src/spec/protect-fallback.json` |
 | Search index shape (the `search` tool's payload) | `src/spec/index-builder.ts` |
 | Tenant resolution from env / headers | `src/tenant/context.ts` |
 | HTTP client (TLS, retry, error normalisation) | `src/client/http.ts` |
 | Cloud-network proxy client factory | `src/client/cloud.ts` (`createCloudNetworkProxyClient`) |
+| Cloud-protect proxy client factory | `src/client/cloud.ts` (`createCloudProtectProxyClient`) |
+| Local Protect client factory | `src/client/local.ts` (`createLocalProtectClient`) |
 | Sandbox resource limits | `src/sandbox/limits.ts` |
 | `search` tool sandbox (sync) | `src/sandbox/search-executor.ts` |
 | `execute` tool sandbox (async) | `src/sandbox/execute-executor.ts` |
@@ -222,17 +238,22 @@ fixtures. Do not strip them.
 ## 8. Tests live next to the system
 
 - `src/__tests__/tenant.test.ts` — env / header builders + missing-cred paths
-- `src/__tests__/spec-loader.test.ts` — CDN fallback + cache behaviour
+- `src/__tests__/spec-loader.test.ts` — CDN fallback + cache behaviour for
+  Network, Cloud, and Protect (including Protect `/v1/meta/info` discovery
+  and the opt-in beezly fallback)
 - `src/__tests__/spec-index.test.ts` — search index shape + tag normalisation
-- `src/__tests__/http-client.test.ts` — local, cloud, cloud-network proxy
-- `src/__tests__/dispatch.test.ts` — sandbox prelude generation + arg auto-routing
+- `src/__tests__/http-client.test.ts` — local, cloud, cloud-network proxy,
+  local-Protect, cloud-Protect proxy
+- `src/__tests__/dispatch.test.ts` — sandbox prelude generation + arg
+  auto-routing, including the `unifi.local.protect.*` and
+  `unifi.cloud.protect(consoleId).*` emission and per-consoleId caching
 - `src/__tests__/sandbox.test.ts` — `ExecuteExecutor` Proxy dispatch end-to-end
 - `src/__tests__/integration/scenarios.test.ts` — full MCP-client → server →
   mock-UniFi round-trip across both stdio (`InMemoryTransport` linked pair)
   and Streamable HTTP transports. Each scenario exercises the real
   `createMcpServer` factory; the mock controller (`mock-controller.ts`)
   records every request so the tests can assert path substitution and
-  body shape.
+  body shape. Scenario D drives the Protect surface end-to-end.
 
 When fixing a bug, write a Vitest case before the fix. The integration
 suite is the right place for "does this work all the way through the
@@ -252,15 +273,19 @@ Before claiming "this works with X", check the table in
 [`README.md` → Verification status](README.md#verification-status).
 We have directly verified:
 
-- 78/78 unit + integration tests (in-process MCP transport + real HTTP
-  transport) against a mock UniFi controller.
-- A real read-only sweep of the maintainer's home network through
+- 94/94 unit + integration tests (in-process MCP transport + real HTTP
+  transport) against a mock UniFi controller. The mock now serves both
+  `/proxy/network/integration/*` and `/proxy/protect/integration/*`.
+- A real read-only sweep of the maintainer's home Network through
   `unifi.cloud.network()` end-to-end, with HLD/LLD/best-practices docs
   generated from the result.
 - Protocol-level registration via `cursor-agent mcp list-tools unifi`.
-- One end-to-end LLM-mediated invocation: Claude Sonnet 4.6 driving
-  the server through `cursor-agent` in interactive PTY mode. Evidence
-  in `out/verification/cursor-agent-sonnet-mcp-call.txt`.
+- Two end-to-end LLM-mediated invocations against two different
+  clients with two different models:
+  - Claude Sonnet 4.6 through `cursor-agent` interactive PTY mode —
+    evidence at `out/verification/cursor-agent-sonnet-mcp-call.txt`.
+  - DeepSeek v4 Flash through `opencode --pure run` — evidence at
+    `out/verification/opencode-deepseek-mcp-call.txt`.
 
 Things we have **not** yet verified:
 
@@ -270,18 +295,38 @@ Things we have **not** yet verified:
 - A hosted multi-tenant deployment of the Streamable HTTP transport
   behind a reverse proxy.
 - Long-running soak / stability under sustained load.
+- More than one model on each verified client (we drove only one model
+  per client end-to-end).
+- **The Protect surface against a real Protect-enabled UniFi OS device.**
+  All Protect tests run against the mock controller. The first time
+  someone runs the server against a real Protect deployment, expect
+  bumps — the bundled curated spec was written from public observation,
+  not a real `/v1/meta/info` response.
+- **The cloud-Protect connector path.** Ubiquiti has not publicly
+  documented that `api.ui.com/v1/connector/consoles/{id}/proxy/protect/integration`
+  exists. We expose it on the assumption it follows the Network
+  connector's pattern. If it does not, calls return a structured
+  `[unifi.cloud.protect.http]` error and the model should fall back to
+  the local surface.
 
 If you add new client coverage, update the table in the README in the
 same PR. Do not silently widen the "verified" surface.
 
-A specific gotcha to keep in mind: against `cursor-agent v2026.05.05`,
-custom MCPs configured in `.cursor/mcp.json` are **not** auto-injected
-as model-callable tools, in either `--print` or interactive mode, even
-when `cursor-agent mcp list` shows the server as `ready`. Capable
-models work around this by reading `.cursor/mcp.json` themselves and
-spawning the server over stdio via shell commands. We treat this as a
-Cursor CLI limitation, not a server bug; see `docs/cursor-skill.md`
-§8 for the writeup.
+Two client-specific gotchas you'll save time knowing about:
+
+- **cursor-agent v2026.05.05** does not auto-inject custom MCPs as
+  model-callable tools, in either `--print` or interactive mode, even
+  when `cursor-agent mcp list` shows the server as `ready`. Capable
+  models work around this by reading `.cursor/mcp.json` themselves and
+  spawning the server over stdio via shell commands. See
+  `docs/cursor-skill.md` §8.
+- **opencode v1.14.30** *does* auto-inject MCPs cleanly under the
+  `<server>_<tool>` name scheme. But you must run with `--pure` to
+  avoid a Zod-validation hang in the bundled `plugin.copilot`, and
+  beware persistent per-model `variant` settings in
+  `~/.local/state/opencode/model.json` (a stale `variant: max` once
+  turned an 8-second deepseek call into an 8.5-minute one). See
+  `docs/opencode-skill.md`.
 
 ---
 
@@ -297,13 +342,21 @@ Cursor CLI limitation, not a server bug; see `docs/cursor-skill.md`
 
 ## 10. Roadmap (intentional, not yet implemented)
 
-- `unifi.cloud.protect(consoleId).*` — same connector pattern
-  (`/v1/connector/consoles/{id}/proxy/protect/integration`) for the Protect
-  API. Schema to be added once Ubiquiti publishes one.
+- **Live Protect verification** — drive `unifi.local.protect.*` and
+  `unifi.cloud.protect(consoleId).*` against a real Protect-enabled
+  UniFi OS console. Until then, the Protect surfaces are wired but
+  unproven against live hardware (see §2 and §8.1). Schema to be
+  broadened once Ubiquiti publishes a Protect Integration spec; the
+  current bundled fragment is hand-written from publicly observable
+  behaviour.
+- **Protect WebSocket events** (`/v1/subscribe/events`,
+  `/v1/subscribe/devices`, `/v1/cameras/{id}/talkback-session`,
+  `/v1/cameras/{id}/rtsps-stream`) — the current sandbox/HTTP-client
+  pair only handles JSON-over-HTTP, so streaming surfaces are out of
+  scope. Adding them needs a separate transport in the sandbox.
 - Per-tenant rate limiting (today the limiter is per-IP only).
-- An MCP-side `SKILL.md` describing how a client agent should drive the
-  two tools (search → execute, error-recovery patterns, budgets).
 - `cf-worker` parity tests so the Workers entry doesn't drift from the
   Node implementation.
 
 If you pick one up, write a short design note in `docs/` first.
+The Protect surface design note lives at [`docs/protect-design.md`](docs/protect-design.md).

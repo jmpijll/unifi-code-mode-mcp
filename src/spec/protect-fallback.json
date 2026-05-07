@@ -1,0 +1,341 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "UniFi Protect Integration API (curated fallback)",
+    "version": "fallback-1",
+    "description": "Curated minimal schema for the most commonly used operations of the UniFi Protect Integration API. Used when no Protect spec URL is reachable. Hand-written from publicly observable controller behaviour; does not reproduce any third-party spec. The full surface (alarm-manager webhooks, files, fobs, link-stations, relays, speakers, ULP users, subscribe/* WebSockets, talk-back, RTSPS streaming) is out of scope for this fallback. Set UNIFI_PROTECT_SPEC_URL to a full spec to broaden the surface."
+  },
+  "servers": [
+    { "url": "/integration" }
+  ],
+  "tags": [
+    { "name": "meta", "description": "Application metadata (use for version discovery)" },
+    { "name": "cameras", "description": "Camera information and PTZ control" },
+    { "name": "nvrs", "description": "NVR (Network Video Recorder) information" },
+    { "name": "sensors", "description": "Environmental and motion sensors" },
+    { "name": "lights", "description": "UniFi smart lights" },
+    { "name": "chimes", "description": "Doorbell chimes" },
+    { "name": "alarmHubs", "description": "Alarm hubs and their outputs" },
+    { "name": "sirens", "description": "Sirens / annunciators" },
+    { "name": "viewers", "description": "Display devices (UniFi Viewport)" },
+    { "name": "liveviews", "description": "Saved camera live-view layouts" },
+    { "name": "users", "description": "Protect users" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  },
+  "security": [{ "ApiKeyAuth": [] }],
+  "paths": {
+    "/v1/meta/info": {
+      "get": {
+        "operationId": "getProtectMetaInfo",
+        "tags": ["meta"],
+        "summary": "Get the Protect application version and metadata",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/cameras": {
+      "get": {
+        "operationId": "listCameras",
+        "tags": ["cameras"],
+        "summary": "List all cameras adopted by this Protect controller",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/cameras/{id}": {
+      "get": {
+        "operationId": "getCamera",
+        "tags": ["cameras"],
+        "summary": "Get a single camera by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/cameras/{id}/snapshot": {
+      "get": {
+        "operationId": "getCameraSnapshot",
+        "tags": ["cameras"],
+        "summary": "Get a JPEG snapshot URL for a camera. Note: the response payload contains a URL or binary data; check the controller behaviour.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "highQuality", "in": "query", "schema": { "type": "boolean" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/cameras/{id}/ptz/goto/{slot}": {
+      "post": {
+        "operationId": "cameraPtzGoto",
+        "tags": ["cameras"],
+        "summary": "Move a PTZ camera to a preset position",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "slot", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "204": { "description": "Accepted" } }
+      }
+    },
+    "/v1/cameras/{id}/ptz/patrol/start/{slot}": {
+      "post": {
+        "operationId": "cameraPtzPatrolStart",
+        "tags": ["cameras"],
+        "summary": "Start a PTZ patrol routine on a camera",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "slot", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "204": { "description": "Accepted" } }
+      }
+    },
+    "/v1/cameras/{id}/ptz/patrol/stop": {
+      "post": {
+        "operationId": "cameraPtzPatrolStop",
+        "tags": ["cameras"],
+        "summary": "Stop the active PTZ patrol routine on a camera",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "204": { "description": "Accepted" } }
+      }
+    },
+    "/v1/nvrs": {
+      "get": {
+        "operationId": "listNvrs",
+        "tags": ["nvrs"],
+        "summary": "List NVRs (typically 1: the controller itself)",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sensors": {
+      "get": {
+        "operationId": "listSensors",
+        "tags": ["sensors"],
+        "summary": "List all sensors adopted by this Protect controller",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sensors/{id}": {
+      "get": {
+        "operationId": "getSensor",
+        "tags": ["sensors"],
+        "summary": "Get a single sensor by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/lights": {
+      "get": {
+        "operationId": "listLights",
+        "tags": ["lights"],
+        "summary": "List all UniFi smart lights",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/lights/{id}": {
+      "get": {
+        "operationId": "getLight",
+        "tags": ["lights"],
+        "summary": "Get a single light by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/chimes": {
+      "get": {
+        "operationId": "listChimes",
+        "tags": ["chimes"],
+        "summary": "List all doorbell chimes",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/chimes/{id}": {
+      "get": {
+        "operationId": "getChime",
+        "tags": ["chimes"],
+        "summary": "Get a single chime by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/alarm-hubs": {
+      "get": {
+        "operationId": "listAlarmHubs",
+        "tags": ["alarmHubs"],
+        "summary": "List all alarm hubs",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/alarm-hubs/{id}": {
+      "get": {
+        "operationId": "getAlarmHub",
+        "tags": ["alarmHubs"],
+        "summary": "Get a single alarm hub by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/alarm-hubs/{id}/outputs/{outputId}/trigger": {
+      "post": {
+        "operationId": "triggerAlarmHubOutput",
+        "tags": ["alarmHubs"],
+        "summary": "Trigger an alarm hub output (siren, strobe, relay)",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "outputId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "durationSeconds": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "204": { "description": "Triggered" } }
+      }
+    },
+    "/v1/sirens": {
+      "get": {
+        "operationId": "listSirens",
+        "tags": ["sirens"],
+        "summary": "List all sirens",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sirens/{id}": {
+      "get": {
+        "operationId": "getSiren",
+        "tags": ["sirens"],
+        "summary": "Get a single siren by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sirens/{id}/play": {
+      "post": {
+        "operationId": "playSiren",
+        "tags": ["sirens"],
+        "summary": "Start a siren",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "durationSeconds": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "204": { "description": "Started" } }
+      }
+    },
+    "/v1/sirens/{id}/stop": {
+      "post": {
+        "operationId": "stopSiren",
+        "tags": ["sirens"],
+        "summary": "Stop a siren",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "204": { "description": "Stopped" } }
+      }
+    },
+    "/v1/sirens/{id}/test-sound": {
+      "post": {
+        "operationId": "testSirenSound",
+        "tags": ["sirens"],
+        "summary": "Play a short test sound on a siren",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "204": { "description": "Played" } }
+      }
+    },
+    "/v1/viewers": {
+      "get": {
+        "operationId": "listViewers",
+        "tags": ["viewers"],
+        "summary": "List all viewer (Viewport) devices",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/viewers/{id}": {
+      "get": {
+        "operationId": "getViewer",
+        "tags": ["viewers"],
+        "summary": "Get a single viewer by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/liveviews": {
+      "get": {
+        "operationId": "listLiveviews",
+        "tags": ["liveviews"],
+        "summary": "List saved live-view layouts",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/liveviews/{id}": {
+      "get": {
+        "operationId": "getLiveview",
+        "tags": ["liveviews"],
+        "summary": "Get a single live-view by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/users": {
+      "get": {
+        "operationId": "listProtectUsers",
+        "tags": ["users"],
+        "summary": "List Protect users",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/users/{id}": {
+      "get": {
+        "operationId": "getProtectUser",
+        "tags": ["users"],
+        "summary": "Get a single Protect user by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}

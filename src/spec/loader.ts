@@ -28,7 +28,7 @@ const __dirname = dirname(__filename);
 // ─── Cache keys ─────────────────────────────────────────────────────
 
 interface SpecCacheKey {
-  kind: 'local' | 'cloud';
+  kind: 'local' | 'cloud' | 'protect';
   version: string;
 }
 
@@ -72,6 +72,36 @@ export interface LoadCloudSpecOptions {
   cacheDir: string;
   /** Force re-fetch from network even if cache exists. */
   forceRefresh?: boolean;
+}
+
+export interface LoadProtectSpecOptions {
+  /**
+   * Base URL of a controller running Protect, e.g. https://192.168.1.1.
+   * Used for /v1/meta/info version discovery if no override is set.
+   * Optional — when omitted, version discovery is skipped and we go
+   * straight to the candidate-URL ladder + bundled fallback.
+   */
+  baseUrl?: string;
+  /** PEM-encoded CA bundle for the version-discovery call, if any. */
+  caCert?: string;
+  /** Skip TLS verification on the version-discovery call. */
+  insecure?: boolean;
+  /** API key for /proxy/protect/integration/v1/meta/info, if used. */
+  apiKey?: string;
+  /** Force a specific Protect spec URL (highest priority). */
+  specUrlOverride?: string;
+  /**
+   * If true, fall back to the community-maintained beezly/unifi-apis
+   * raw URL when neither the override nor an apidoc-cdn.ui.com guess
+   * resolves. Off by default — third-party source, no explicit license.
+   */
+  allowBeezlyFallback?: boolean;
+  /** Where to cache fetched specs on disk. */
+  cacheDir: string;
+  /** Force re-fetch from network even if cache exists. */
+  forceRefresh?: boolean;
+  /** Optional callback for non-fatal load warnings (spec fallbacks, etc.). */
+  onWarn?: (msg: string) => void;
 }
 
 /**
@@ -190,6 +220,120 @@ export async function loadCloudSpec(opts: LoadCloudSpecOptions): Promise<Process
   return processed;
 }
 
+/**
+ * Load (and cache) the UniFi Protect Integration OpenAPI spec.
+ *
+ * Loading order (first one that succeeds wins):
+ *   1. opts.specUrlOverride (full URL — highest priority)
+ *   2. apidoc-cdn.ui.com/protect/v<discovered-or-known>/integration.json
+ *      (best-effort — Ubiquiti has not confirmed publishing here)
+ *   3. The beezly/unifi-apis raw URL for the highest known version,
+ *      ONLY if opts.allowBeezlyFallback is true (third-party, no license).
+ *   4. The bundled curated fallback at src/spec/protect-fallback.json.
+ */
+export async function loadProtectSpec(
+  opts: LoadProtectSpecOptions,
+): Promise<ProcessedSpec> {
+  await mkdir(opts.cacheDir, { recursive: true });
+
+  const onWarn = opts.onWarn ?? (() => undefined);
+  const dispatcher = buildDispatcher({ caCert: opts.caCert, insecure: opts.insecure });
+
+  let discoveredVersion: string | undefined;
+  if (!opts.specUrlOverride && opts.baseUrl) {
+    try {
+      discoveredVersion = await fetchProtectAppVersion(
+        opts.baseUrl,
+        opts.apiKey,
+        dispatcher,
+      );
+    } catch (err) {
+      onWarn(
+        `Could not discover Protect version from ${opts.baseUrl}: ` +
+          `${err instanceof Error ? err.message : String(err)}. ` +
+          'Falling back to known-version ladder.',
+      );
+    }
+  }
+
+  const candidateUrls: string[] = [];
+  if (opts.specUrlOverride) {
+    candidateUrls.push(opts.specUrlOverride);
+  } else {
+    if (discoveredVersion) {
+      candidateUrls.push(protectSpecUrlForVersion(discoveredVersion));
+    }
+    for (const v of KNOWN_PROTECT_SPEC_VERSIONS) {
+      candidateUrls.push(protectSpecUrlForVersion(v));
+    }
+    if (opts.allowBeezlyFallback) {
+      candidateUrls.push(BEEZLY_PROTECT_SPEC_URL);
+    }
+  }
+
+  for (const url of candidateUrls) {
+    const cacheVersionGuess = extractVersionFromUrl(url) ?? discoveredVersion ?? 'remote';
+    const requestedKey: SpecCacheKey = { kind: 'protect', version: cacheVersionGuess };
+    const requestedMemoKey = cacheKeyToString(requestedKey);
+
+    if (!opts.forceRefresh) {
+      const cached = memoryCache.get(requestedMemoKey);
+      if (cached) return cached;
+
+      const onDisk = await readCacheFile(cacheFilePath(opts.cacheDir, requestedKey));
+      if (onDisk) {
+        memoryCache.set(requestedMemoKey, onDisk);
+        return onDisk;
+      }
+    }
+
+    try {
+      const document = await fetchSpec(url);
+      const version = document.info.version ?? cacheVersionGuess;
+      const processed = await processSpec({
+        document,
+        sourceUrl: url,
+        version,
+        title: 'UniFi Protect Integration API',
+        defaultServerPrefix: '/proxy/protect/integration',
+      });
+      const resolvedKey: SpecCacheKey = { kind: 'protect', version };
+      memoryCache.set(cacheKeyToString(resolvedKey), processed);
+      memoryCache.set(requestedMemoKey, processed);
+      await writeCacheFile(cacheFilePath(opts.cacheDir, resolvedKey), processed);
+      if (resolvedKey.version !== requestedKey.version) {
+        await writeCacheFile(cacheFilePath(opts.cacheDir, requestedKey), processed);
+      }
+      onWarn(
+        `Loaded Protect spec ${version} from ${url}` +
+          (discoveredVersion && discoveredVersion !== version
+            ? ` (controller reported v${discoveredVersion}; spec is the closest known).`
+            : '.'),
+      );
+      return processed;
+    } catch {
+      // Try the next candidate.
+    }
+  }
+
+  // Final fallback: ship the bundled curated fragment.
+  const fallback = await readProtectFallbackSpec();
+  const version = fallback.info.version ?? 'fallback';
+  const processed = await processSpec({
+    document: fallback,
+    sourceUrl: 'embedded:protect-fallback.json',
+    version,
+    title: 'UniFi Protect Integration API (fallback)',
+    defaultServerPrefix: '/proxy/protect/integration',
+  });
+  memoryCache.set(cacheKeyToString({ kind: 'protect', version }), processed);
+  onWarn(
+    'Loaded the curated Protect fallback spec (no online spec was reachable). ' +
+      'The full Protect surface is wider than the bundled fragment — set UNIFI_PROTECT_SPEC_URL to a complete spec to broaden it.',
+  );
+  return processed;
+}
+
 /** Drop all cached specs (forces re-fetch on next access). */
 export function clearSpecCache(): void {
   memoryCache.clear();
@@ -237,6 +381,15 @@ function networkSpecUrlForVersion(version: string): string {
   return `https://apidoc-cdn.ui.com/network/${v}/integration.json`;
 }
 
+function protectSpecUrlForVersion(version: string): string {
+  const v = version.startsWith('v') ? version : `v${version}`;
+  return `https://apidoc-cdn.ui.com/protect/${v}/integration.json`;
+}
+
+/** Community-extracted Protect spec URLs (third-party, no explicit license). */
+const BEEZLY_PROTECT_SPEC_URL =
+  'https://raw.githubusercontent.com/beezly/unifi-apis/main/unifi-protect/7.1.46.json';
+
 /**
  * Versions of the Network Integration spec we've confirmed are published
  * on apidoc-cdn.ui.com. Used as fallbacks when the controller reports a
@@ -245,6 +398,45 @@ function networkSpecUrlForVersion(version: string): string {
  * Order: most-recent-known-good first. To extend, simply add a tag here.
  */
 export const KNOWN_NETWORK_SPEC_VERSIONS: readonly string[] = ['10.1.84'];
+
+/**
+ * Versions of the Protect Integration spec we **guess** Ubiquiti might
+ * host on apidoc-cdn.ui.com (analogous to Network's structure). None of
+ * these are confirmed; the loader falls through to bundled-fallback if
+ * none resolve. Order: most-recent-likely first.
+ */
+export const KNOWN_PROTECT_SPEC_VERSIONS: readonly string[] = ['7.1.46', '7.0.107'];
+
+async function fetchProtectAppVersion(
+  baseUrl: string,
+  apiKey: string | undefined,
+  dispatcher: Dispatcher | undefined,
+): Promise<string> {
+  const url = joinUrl(baseUrl, '/proxy/protect/integration/v1/meta/info');
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (apiKey) headers['X-API-Key'] = apiKey;
+
+  const res = await undiciFetch(url, {
+    method: 'GET',
+    headers,
+    dispatcher,
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch ${url}: HTTP ${String(res.status)} ${res.statusText}. ` +
+        'Is the Protect application installed on this controller?',
+    );
+  }
+
+  const body = (await res.json()) as Record<string, unknown>;
+  const version = body['applicationVersion'] ?? body['version'];
+  if (typeof version !== 'string' || version.length === 0) {
+    throw new Error(`Protect /v1/meta/info returned no application version: ${JSON.stringify(body)}`);
+  }
+  return version;
+}
 
 function extractVersionFromUrl(url: string): string | undefined {
   const m = /\/v?(\d+\.\d+\.\d+)\//.exec(url);
@@ -381,6 +573,12 @@ async function writeCacheFile(path: string, spec: ProcessedSpec): Promise<void> 
 
 async function readFallbackSpec(): Promise<OpenApiDocument> {
   const path = resolve(__dirname, 'cloud-fallback.json');
+  const raw = await readFile(path, 'utf-8');
+  return JSON.parse(raw) as OpenApiDocument;
+}
+
+async function readProtectFallbackSpec(): Promise<OpenApiDocument> {
+  const path = resolve(__dirname, 'protect-fallback.json');
   const raw = await readFile(path, 'utf-8');
   return JSON.parse(raw) as OpenApiDocument;
 }

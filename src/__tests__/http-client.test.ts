@@ -3,7 +3,9 @@ import { buildQueryString, substitutePathParams } from '../client/http.js';
 import {
   createCloudClient,
   createCloudNetworkProxyClient,
+  createCloudProtectProxyClient,
   createLocalClient,
+  createLocalProtectClient,
 } from '../client/index.js';
 
 describe('substitutePathParams', () => {
@@ -77,6 +79,50 @@ describe('client factories', () => {
   it('createCloudNetworkProxyClient rejects empty consoleId', () => {
     expect(() =>
       createCloudNetworkProxyClient({ baseUrl: 'https://api.ui.com', apiKey: 'k' }, ''),
+    ).toThrow(/consoleId/);
+  });
+
+  it('createLocalProtectClient prefixes /proxy/protect/integration', () => {
+    const client = createLocalProtectClient({ baseUrl: 'https://192.0.2.1', apiKey: 'k' });
+    expect(client.config.pathPrefix).toBe('/proxy/protect/integration');
+    expect(client.config.baseUrl).toBe('https://192.0.2.1');
+    expect(client.config.label).toBe('unifi.local.protect');
+  });
+
+  it('createLocalProtectClient honours TLS opt-outs identical to network', () => {
+    const client = createLocalProtectClient({
+      baseUrl: 'https://192.0.2.1',
+      apiKey: 'k',
+      insecure: true,
+    });
+    expect(client.config.insecure).toBe(true);
+  });
+
+  it('createCloudProtectProxyClient prefixes the connector path with consoleId', () => {
+    const client = createCloudProtectProxyClient(
+      { baseUrl: 'https://api.ui.com', apiKey: 'k' },
+      'console-abc',
+    );
+    expect(client.config.baseUrl).toBe('https://api.ui.com');
+    expect(client.config.pathPrefix).toBe(
+      '/v1/connector/consoles/console-abc/proxy/protect/integration',
+    );
+    expect(client.config.label).toBe('unifi.cloud.protect[console-abc]');
+  });
+
+  it('createCloudProtectProxyClient URL-encodes the consoleId', () => {
+    const client = createCloudProtectProxyClient(
+      { baseUrl: 'https://api.ui.com', apiKey: 'k' },
+      'console with spaces/and-slash',
+    );
+    expect(client.config.pathPrefix).toBe(
+      '/v1/connector/consoles/console%20with%20spaces%2Fand-slash/proxy/protect/integration',
+    );
+  });
+
+  it('createCloudProtectProxyClient rejects empty consoleId', () => {
+    expect(() =>
+      createCloudProtectProxyClient({ baseUrl: 'https://api.ui.com', apiKey: 'k' }, ''),
     ).toThrow(/consoleId/);
   });
 });

@@ -16,7 +16,7 @@
 
 import { loadConfig, type AppConfig } from './config.js';
 import { getQuickJSModule } from './sandbox/executor.js';
-import { loadCloudSpec, loadLocalSpec } from './spec/loader.js';
+import { loadCloudSpec, loadLocalSpec, loadProtectSpec } from './spec/loader.js';
 import { specSummary } from './spec/index.js';
 import {
   buildContextFromEnv,
@@ -93,6 +93,34 @@ async function tryLoadCloudSpec(config: AppConfig): Promise<ProcessedSpec | unde
   }
 }
 
+async function tryLoadProtectSpec(config: AppConfig): Promise<ProcessedSpec | undefined> {
+  try {
+    const spec = await loadProtectSpec({
+      ...(config.unifiLocalBaseUrl ? { baseUrl: config.unifiLocalBaseUrl } : {}),
+      ...(config.unifiLocalApiKey ? { apiKey: config.unifiLocalApiKey } : {}),
+      ...(config.unifiLocalInsecure !== undefined ? { insecure: config.unifiLocalInsecure } : {}),
+      ...(config.unifiProtectSpecUrl ? { specUrlOverride: config.unifiProtectSpecUrl } : {}),
+      ...(config.unifiProtectAllowBeezlyFallback !== undefined
+        ? { allowBeezlyFallback: config.unifiProtectAllowBeezlyFallback }
+        : {}),
+      cacheDir: config.unifiSpecCacheDir,
+      onWarn: (msg: string) => {
+        logger.warn(`[protect-spec] ${msg}`);
+      },
+    });
+    const sum = specSummary(spec);
+    logger.info(
+      `Loaded Protect spec: ${sum.title} v${sum.version} (${String(sum.operationCount)} ops, ${String(sum.tagCount)} tags)`,
+    );
+    return spec;
+  } catch (err) {
+    logger.warn(
+      `Failed to load Protect spec (Protect surfaces will be unavailable): ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return undefined;
+  }
+}
+
 async function main(): Promise<void> {
   logger.info('UniFi Code-Mode MCP Server starting...');
   const config = loadConfig();
@@ -102,9 +130,10 @@ async function main(): Promise<void> {
   await getQuickJSModule();
   logger.info(`QuickJS WASM initialized in ${String(Date.now() - wasmStart)}ms`);
 
-  const [localSpec, cloudSpec] = await Promise.all([
+  const [localSpec, cloudSpec, protectSpec] = await Promise.all([
     tryLoadLocalSpec(config),
     tryLoadCloudSpec(config),
+    tryLoadProtectSpec(config),
   ]);
 
   const tenantResolver = (): TenantContext => {
@@ -116,6 +145,7 @@ async function main(): Promise<void> {
   const server = createMcpServer({
     ...(localSpec ? { localSpec } : {}),
     ...(cloudSpec ? { cloudSpec } : {}),
+    ...(protectSpec ? { protectSpec } : {}),
     tenantResolver,
     limits: { maxCallsPerExecute: config.unifiMaxCallsPerExecute },
     logger,

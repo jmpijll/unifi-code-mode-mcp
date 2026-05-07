@@ -58,15 +58,37 @@ export async function loadLocalFixtureSpec(): Promise<ProcessedSpec> {
   };
 }
 
+/**
+ * Load the bundled curated Protect fallback spec so integration tests
+ * can drive the unifi.local.protect.* surface end-to-end without
+ * touching the network.
+ */
+export async function loadProtectFixtureSpec(): Promise<ProcessedSpec> {
+  const path = resolve(__dirname, '..', '..', 'spec', 'protect-fallback.json');
+  const raw = await readFile(path, 'utf-8');
+  const document = JSON.parse(raw) as OpenApiDocument;
+  return {
+    sourceUrl: 'fixture://protect-fallback.json',
+    version: document.info.version,
+    title: document.info.title,
+    serverPrefix: '/proxy/protect/integration',
+    operations: buildOperationIndex(document),
+    document,
+  };
+}
+
 interface HarnessOptions {
   mode: TransportMode;
   /** Override headers passed by the MCP client (HTTP mode only). */
   headers?: Record<string, string>;
+  /** When true, also load the bundled Protect spec so unifi.local.protect.* is available. */
+  withProtect?: boolean;
 }
 
 export async function setupHarness(opts: HarnessOptions): Promise<Harness> {
   const controller = await startMockController({ apiKey: TEST_API_KEY });
   const localSpec = await loadLocalFixtureSpec();
+  const protectSpec = opts.withProtect ? await loadProtectFixtureSpec() : undefined;
 
   if (opts.mode === 'memory') {
     const tenant: TenantContext = {
@@ -79,6 +101,7 @@ export async function setupHarness(opts: HarnessOptions): Promise<Harness> {
     };
     const server = createMcpServer({
       localSpec,
+      ...(protectSpec ? { protectSpec } : {}),
       tenantResolver: () => tenant,
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -109,6 +132,7 @@ export async function setupHarness(opts: HarnessOptions): Promise<Harness> {
 
   const server = createMcpServer({
     localSpec,
+    ...(protectSpec ? { protectSpec } : {}),
     tenantResolver: () => {
       const ctx = requestStore.getStore();
       if (!ctx)

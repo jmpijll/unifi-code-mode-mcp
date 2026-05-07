@@ -55,6 +55,39 @@ const SPEC: ProcessedSpec = {
   document: SPEC_DOC,
 };
 
+const PROTECT_SPEC_DOC: OpenApiDocument = {
+  openapi: '3.1.0',
+  info: { title: 'Mock Protect', version: 'fallback-1' },
+  paths: {
+    '/v1/meta/info': {
+      get: { operationId: 'getProtectMetaInfo', tags: ['meta'], summary: 'Meta' },
+    },
+    '/v1/cameras': {
+      get: { operationId: 'listCameras', tags: ['cameras'], summary: 'List cameras' },
+    },
+    '/v1/cameras/{id}': {
+      get: {
+        operationId: 'getCamera',
+        tags: ['cameras'],
+        summary: 'Get a camera',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      },
+    },
+    '/v1/nvrs': {
+      get: { operationId: 'listNvrs', tags: ['nvrs'], summary: 'List NVRs' },
+    },
+  },
+};
+
+const PROTECT_SPEC: ProcessedSpec = {
+  sourceUrl: 'mock://protect-spec',
+  version: 'fallback-1',
+  title: 'Mock Protect',
+  serverPrefix: '/proxy/protect/integration',
+  operations: buildOperationIndex(PROTECT_SPEC_DOC),
+  document: PROTECT_SPEC_DOC,
+};
+
 describe('dispatchOperation', () => {
   it('throws UnknownOperationError for missing op', async () => {
     const client = makeMockClient();
@@ -281,6 +314,145 @@ describe('buildUnifiPrelude', () => {
     );
     expect(() => unifi!.cloud.network('')).toThrow(/consoleId/);
     expect(() => unifi!.cloud.network(undefined)).toThrow(/consoleId/);
+  });
+
+  it('does not emit Protect surfaces unless a Protect spec is given', () => {
+    const prelude = buildUnifiPrelude(SPEC, SPEC, {
+      exposeCloudNetworkProxy: true,
+      exposeLocalProtect: true,
+      exposeCloudProtectProxy: true,
+    });
+    expect(prelude).not.toContain('unifi.local.protect');
+    expect(prelude).not.toContain('unifi.cloud.protect = function');
+    expect(prelude).not.toContain('__unifiCallLocalProtect');
+    expect(prelude).not.toContain('__unifiCallCloudProtect');
+  });
+
+  it('emits unifi.local.protect when a Protect spec + exposeLocalProtect are set', () => {
+    const prelude = buildUnifiPrelude(SPEC, SPEC, {
+      protectSpec: PROTECT_SPEC,
+      exposeLocalProtect: true,
+    });
+    expect(prelude).toContain('unifi.local.protect = protectNs');
+    expect(prelude).toContain('protectNs.cameras = {}');
+    expect(prelude).toContain('protectNs.cameras.listCameras');
+    expect(prelude).toContain('__unifiCallLocalProtect');
+    expect(prelude).toContain('__unifiRawLocalProtect');
+    expect(() => new Function(prelude)).not.toThrow();
+  });
+
+  it('emits unifi.cloud.protect(consoleId) when both Protect spec + cloud spec + exposeCloudProtectProxy are set', () => {
+    const prelude = buildUnifiPrelude(SPEC, SPEC, {
+      protectSpec: PROTECT_SPEC,
+      exposeCloudProtectProxy: true,
+    });
+    expect(prelude).toContain('unifi.cloud.protect = function');
+    expect(prelude).toContain('__unifiCallCloudProtect');
+    expect(prelude).toContain('__unifiRawCloudProtect');
+    expect(() => new Function(prelude)).not.toThrow();
+  });
+
+  it('cloud.protect(consoleId) factory caches per-id and routes to host bindings', () => {
+    const prelude = buildUnifiPrelude(SPEC, SPEC, {
+      protectSpec: PROTECT_SPEC,
+      exposeCloudProtectProxy: true,
+    });
+    const calls: Array<{ consoleId: string; opId: string; argsJson: string }> = [];
+    const stubs = {
+      __unifiCallLocal: () => undefined,
+      __unifiRawLocal: () => undefined,
+      __unifiCallCloud: () => undefined,
+      __unifiRawCloud: () => undefined,
+      __unifiCallLocalProtect: () => undefined,
+      __unifiRawLocalProtect: () => undefined,
+      __unifiCallCloudProtect: (consoleId: string, opId: string, argsJson: string) => {
+        calls.push({ consoleId, opId, argsJson });
+        return { ok: true, consoleId, opId };
+      },
+      __unifiRawCloudProtect: (consoleId: string, argsJson: string) => {
+        calls.push({ consoleId, opId: '<raw>', argsJson });
+        return { ok: true, consoleId };
+      },
+    };
+
+    type SandboxScope = { unifi?: Record<string, unknown> };
+    const fn = new Function(
+      '__unifiCallLocal',
+      '__unifiRawLocal',
+      '__unifiCallCloud',
+      '__unifiRawCloud',
+      '__unifiCallLocalProtect',
+      '__unifiRawLocalProtect',
+      '__unifiCallCloudProtect',
+      '__unifiRawCloudProtect',
+      `${prelude}\nreturn unifi;`,
+    ) as (...args: unknown[]) => SandboxScope['unifi'];
+
+    const unifi = fn(
+      stubs.__unifiCallLocal,
+      stubs.__unifiRawLocal,
+      stubs.__unifiCallCloud,
+      stubs.__unifiRawCloud,
+      stubs.__unifiCallLocalProtect,
+      stubs.__unifiRawLocalProtect,
+      stubs.__unifiCallCloudProtect,
+      stubs.__unifiRawCloudProtect,
+    );
+
+    const cloud = (unifi as { cloud: { protect: (id: string) => Record<string, unknown> } }).cloud;
+    const handleA = cloud.protect('console-A');
+    const handleB = cloud.protect('console-A');
+    expect(handleA).toBe(handleB);
+
+    const cameras = handleA['cameras'] as Record<string, (args: unknown) => unknown>;
+    cameras['listCameras']({});
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ consoleId: 'console-A', opId: 'listCameras' });
+
+    const handleC = cloud.protect('console-B');
+    expect(handleC).not.toBe(handleA);
+    (handleC as { request: (args: unknown) => unknown }).request({
+      method: 'GET',
+      path: '/v1/meta/info',
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toMatchObject({ consoleId: 'console-B', opId: '<raw>' });
+  });
+
+  it('local.protect routes through __unifiCallLocalProtect', () => {
+    const prelude = buildUnifiPrelude(SPEC, SPEC, {
+      protectSpec: PROTECT_SPEC,
+      exposeLocalProtect: true,
+    });
+    const localProtectCalls: Array<{ opId: string; argsJson: string }> = [];
+    type SandboxScope = { unifi?: { local: { protect: Record<string, Record<string, (args: unknown) => unknown>> } } };
+    const fn = new Function(
+      '__unifiCallLocal',
+      '__unifiRawLocal',
+      '__unifiCallCloud',
+      '__unifiRawCloud',
+      '__unifiCallLocalProtect',
+      '__unifiRawLocalProtect',
+      `${prelude}\nreturn unifi;`,
+    ) as (...args: unknown[]) => SandboxScope['unifi'];
+    const unifi = fn(
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      (opId: string, argsJson: string) => {
+        localProtectCalls.push({ opId, argsJson });
+        return { ok: true, opId };
+      },
+      () => undefined,
+    );
+    const protect = unifi!.local.protect;
+    protect['cameras']!['listCameras']!({});
+    protect['nvrs']!['listNvrs']!({});
+    expect(localProtectCalls).toEqual([
+      { opId: 'listCameras', argsJson: '{}' },
+      { opId: 'listNvrs', argsJson: '{}' },
+    ]);
   });
 });
 /* eslint-enable @typescript-eslint/no-implied-eval, @typescript-eslint/no-non-null-assertion */

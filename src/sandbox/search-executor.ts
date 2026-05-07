@@ -18,16 +18,19 @@ import { SEARCH_MAX_MEMORY_BYTES, SEARCH_TIMEOUT_MS } from './limits.js';
 export interface SearchExecutorOptions {
   local?: ProcessedSpec;
   cloud?: ProcessedSpec;
+  protect?: ProcessedSpec;
 }
 
 export class SearchExecutor extends BaseSyncExecutor {
   private readonly local?: ProcessedSpec;
   private readonly cloud?: ProcessedSpec;
+  private readonly protect?: ProcessedSpec;
 
   constructor(options: SearchExecutorOptions) {
     super({ timeoutMs: SEARCH_TIMEOUT_MS, maxMemoryBytes: SEARCH_MAX_MEMORY_BYTES });
     this.local = options.local;
     this.cloud = options.cloud;
+    this.protect = options.protect;
   }
 
   protected setupContext(
@@ -49,6 +52,7 @@ export class SearchExecutor extends BaseSyncExecutor {
     injectJsonValue(context, 'spec', {
       local: summarize(this.local),
       cloud: summarize(this.cloud),
+      protect: summarize(this.protect),
     });
 
     // getOperation(namespace, identifier) — full operation incl. spec parameter details.
@@ -108,6 +112,7 @@ export class SearchExecutor extends BaseSyncExecutor {
   private specFor(namespace: string): ProcessedSpec | undefined {
     if (namespace === 'local') return this.local;
     if (namespace === 'cloud') return this.cloud;
+    if (namespace === 'protect') return this.protect;
     return undefined;
   }
 }

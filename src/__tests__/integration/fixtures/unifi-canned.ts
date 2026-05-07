@@ -139,3 +139,50 @@ export const CLIENTS_PAGE = {
   })),
   totalCount: 12,
 };
+
+// ─── Protect canned responses ────────────────────────────────────────
+
+export const PROTECT_CAMERA_FRONT_ID = '00000000-0000-4000-8000-0000000000e1';
+export const PROTECT_CAMERA_DRIVE_ID = '00000000-0000-4000-8000-0000000000e2';
+export const PROTECT_NVR_ID = '00000000-0000-4000-8000-0000000000f1';
+
+export const PROTECT_META_INFO = {
+  applicationVersion: '7.1.46-test',
+  hostShortName: 'mock-protect',
+};
+
+export const PROTECT_CAMERA_FRONT = {
+  id: PROTECT_CAMERA_FRONT_ID,
+  name: 'Front Door',
+  type: 'UVC-G4-Bullet',
+  state: 'CONNECTED',
+  isPtz: false,
+  channels: [{ id: 0, name: 'High', resolutionIndex: 0 }],
+};
+
+export const PROTECT_CAMERA_DRIVE = {
+  id: PROTECT_CAMERA_DRIVE_ID,
+  name: 'Driveway',
+  type: 'UVC-G4-PTZ',
+  state: 'CONNECTED',
+  isPtz: true,
+  channels: [{ id: 0, name: 'High', resolutionIndex: 0 }],
+};
+
+export const PROTECT_CAMERAS_PAGE = {
+  data: [PROTECT_CAMERA_FRONT, PROTECT_CAMERA_DRIVE],
+  totalCount: 2,
+};
+
+export const PROTECT_NVRS_PAGE = {
+  data: [
+    {
+      id: PROTECT_NVR_ID,
+      name: 'Mock NVR',
+      type: 'UDM-Pro-Max',
+      state: 'CONNECTED',
+      version: '7.1.46-test',
+    },
+  ],
+  totalCount: 1,
+};

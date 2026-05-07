@@ -34,6 +34,11 @@ const configSchema = z.object({
 
   // Spec loading
   unifiLocalSpecUrl: z.string().optional(),
+  unifiProtectSpecUrl: z.string().optional(),
+  unifiProtectAllowBeezlyFallback: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : ['true', '1', 'yes'].includes(v.toLowerCase()))),
   unifiSpecCacheDir: z
     .string()
     .default('./src/spec/cache')
@@ -60,6 +65,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     unifiCloudApiKey: env['UNIFI_CLOUD_API_KEY'],
 
     unifiLocalSpecUrl: env['UNIFI_LOCAL_SPEC_URL'],
+    unifiProtectSpecUrl: env['UNIFI_PROTECT_SPEC_URL'],
+    unifiProtectAllowBeezlyFallback: env['UNIFI_PROTECT_ALLOW_BEEZLY_FALLBACK'],
     unifiSpecCacheDir: env['UNIFI_SPEC_CACHE_DIR'],
 
     unifiMaxCallsPerExecute: env['UNIFI_MAX_CALLS_PER_EXECUTE'],
