@@ -22,6 +22,10 @@ The UniFi Network Integration API has **70+ endpoints**. Exposing each as a sepa
 - **Hybrid deployment** — runs on Node.js (stdio + Streamable HTTP) or Cloudflare Workers (using `@cloudflare/codemode` + Worker Loader)
 - **TLS done right** — strict by default, per-tenant custom CA cert, optional opt-in to insecure (with loud warnings)
 
+## For agents driving this server
+
+If you're an LLM agent (or a human configuring one) connecting to a running instance, read [`SKILL.md`](SKILL.md) for the operating manual — the `search → execute` loop, the three sandbox surfaces, the error taxonomy, and ready-to-paste recipes. For Cursor IDE / Cursor CLI specifically, see [`docs/cursor-skill.md`](docs/cursor-skill.md).
+
 ## Quickstart (single-user)
 
 ```bash
