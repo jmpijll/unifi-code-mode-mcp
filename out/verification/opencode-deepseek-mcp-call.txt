@@ -1,0 +1,97 @@
+================================================================================
+END-TO-END LLM-MEDIATED MCP VERIFICATION — DeepSeek v4 Flash via opencode
+Recorded: 2026-05-07 10:09 UTC (12:09 CEST)
+Source: opencode v1.14.30 SQLite session ses_1fe0e55f3ffe0fjvUDtweaqR41
+================================================================================
+
+COMMAND:
+  opencode run --model opencode-go/deepseek-v4-flash \
+    "Use the unifi_search tool with the code argument set to:
+     spec.cloud.operations.length . Then report back ONLY the single number
+     that the tool returned, nothing else."
+
+OPENCODE.JSON (project-scoped):
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "unifi": {
+      "type": "local",
+      "command": ["node", "dist/index.js"],
+      "enabled": true
+    }
+  },
+  "permission": {
+    "unifi_*": "allow"
+  }
+}
+
+OPENCODE STARTUP LOGS (from share/opencode/log/2026-05-07T101006.log):
+  [INFO] service=mcp key=unifi type=local found
+  [INFO] service=mcp key=unifi mcp stderr: [INFO] UniFi Code-Mode MCP Server starting...
+  [INFO] service=mcp key=unifi mcp stderr: [INFO] Loaded cloud spec: UniFi Site Manager API (fallback) vfallback-1 (9 ops, 5 tags)
+  [INFO] service=mcp key=unifi mcp stderr: [INFO] MCP server listening on stdio
+  [INFO] service=mcp key=unifi toolCount=2 create() successfully created client
+
+MODEL'S ACTUAL TOOL INVOCATION (from opencode SQLite session, verbatim):
+
+  step 1 — reasoning:
+    "The user wants me to use the unifi_search tool with a specific code
+     argument and then report back only the number returned."
+
+  step 1 — tool call (the proof):
+{
+    "type": "tool",
+    "tool": "unifi_search",
+    "callID": "call_00_ZsTiZ7nv7ISC1cX3tQzd0486",
+    "state": {
+        "status": "completed",
+        "input": {
+            "code": "spec.cloud.operations.length"
+        },
+        "output": "9\n\n--- Executed in 12ms ---",
+        "metadata": {
+            "truncated": false
+        },
+        "title": "",
+        "time": {
+            "start": 1778149081065,
+            "end": 1778149081087
+        },
+        "attachments": []
+    }
+}
+
+  step 2 — final text:
+    "9"
+
+TOKENS / COST:
+  step 1: 14,936 total (14,862 input  / 49 output / 25 reasoning)
+  step 2:    110 input / 2 output / 25 reasoning (cached)
+  Total cost: $0.0022
+
+WHAT THIS PROVES:
+  ✓ Project-scoped opencode.json (mcp.unifi → node dist/index.js) is correctly
+    loaded by opencode.
+  ✓ opencode auto-injects MCP tools into the model's tool list using the
+    naming scheme <server>_<tool> — the model received unifi_search and
+    unifi_execute as native callable tools, no spawn-yourself hacks needed.
+  ✓ A real LLM (DeepSeek v4 Flash) called unifi_search with the correct
+    arguments and the server returned the correct value ("9
+
+--- Executed
+    in 12ms ---").
+  ✓ The tool execution itself took 22 ms (start→end timestamps in the JSON).
+
+WHAT THIS DOES NOT PROVE:
+  ✗ Fast turnaround on DeepSeek v4 Flash. The 8.5-minute end-to-end wallclock
+    was caused by an opencode-persisted variant setting of "max" (highest
+    reasoning tier) on this model. With the default variant or a smaller
+    reasoning effort, the same tool call would finish in seconds. We treat
+    this as an opencode usability issue (stale variant from a prior run is
+    not visible in --print output), not a server bug.
+  ✗ This was tested with one model on one prompt. It does not generalise
+    to all opencode models (the github-copilot/* runs have an unrelated
+    plugin.copilot Zod-validation error in opencode v1.14.30 that hangs
+    bootstrap, mitigated by --pure).
+
+================================================================================

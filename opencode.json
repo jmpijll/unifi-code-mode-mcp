@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "unifi": {
+      "type": "local",
+      "command": ["node", "dist/index.js"],
+      "enabled": true
+    }
+  },
+  "permission": {
+    "unifi_*": "allow"
+  }
+}
