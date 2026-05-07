@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Working-tree PII scrub** (`chore(privacy): scrub maintainer PII
+  from working tree`). Two cosmetic-but-real fingerprints removed from
+  the working tree: `package.json` author switched from a personal
+  Hotmail address to the GitHub-issued
+  `jmpijll@users.noreply.github.com` form, and the two
+  `scripts/verify-mutations*.ts` mutation scripts no longer default
+  their `cameraId` to a hardcoded id from the maintainer's homelab.
+  Instead, they require the camera id explicitly via `argv[2]` or
+  `UNIFI_CAMERA_ID`, with a clear error message when neither is set.
+  Camera ids are not credentials (useless without a local API key +
+  LAN reachability), but baking a specific homelab camera into a
+  public script was a fingerprint with no upside.
+
+### History rewrite (2026-05-07, post-flip)
+
+A `git filter-repo` history rewrite was applied immediately after the
+public visibility flip to scrub three PII vectors that had slipped into
+git history while the repo was still private:
+
+1. The author's personal Hotmail address (`jmpijll@users.noreply.github.com`)
+   in `package.json` and in 23 historical commit Author headers — all
+   replaced with `jmpijll@users.noreply.github.com`.
+2. An absolute home-directory path (`/path/to/unifi-code-mode-mcp`)
+   that survived in commit `897b5e8`'s body of
+   `out/verification/cursor-agent-sonnet-mcp-call.txt` — replaced with
+   `/path/to/unifi-code-mode-mcp` everywhere.
+3. The maintainer's "Tuin" camera id (`<camera-id>`)
+   hardcoded as a default in `scripts/verify-mutations*.ts` —
+   replaced with the literal `<camera-id>` placeholder in history.
+
+All commit hashes from before the rewrite are now invalid. If you
+cloned the repo during the ~30-minute window between the public flip
+and this rewrite, please reclone from `main` (your existing clone's
+HEAD will not exist on origin). All seven Dependabot PRs that opened
+during that window were closed and will be recreated by Dependabot
+against the new history on its next run. Tags `v0.2.0-beta.1` and
+`v0.2.0-beta.2` were force-updated to point at their rewritten
+equivalents; the GitHub release for `v0.2.0-beta.2` is unchanged in
+content (it references the tag, not a SHA).
+
+The pre-rewrite repo state is preserved as a `git bundle` at
+`out/scans/backup/pre-filter-repo-*.bundle` for one-way audit
+reference; that bundle is gitignored by `out/*` and should not be
+re-committed.
+
 ## [0.2.0-beta.2] — 2026-05-07
 
 **Public-flip release.** Closes the homelab-doable verification gaps
