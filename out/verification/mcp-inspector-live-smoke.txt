@@ -1,0 +1,138 @@
+================================================================================
+MCP INSPECTOR LIVE SMOKE TEST — UDM-Pro running Network 10.3.58
+Recorded: 2026-05-07 ~18:22 CEST (16:22 UTC)
+Tool:     @modelcontextprotocol/inspector v0.20.0 (CLI mode)
+Server:   node dist/index.js (stdio transport)
+================================================================================
+
+WHAT THIS PROVES
+  ✓ The official MCP Inspector CLI talks to our server cleanly over
+    stdio. tools/list returns both `search` and `execute` with their
+    full descriptors (titles, descriptions, inputSchemas).
+  ✓ tools/call works for both tools.
+    – `execute` with credential-free sandbox-only code returns the
+      surface introspection result correctly.
+    – `search` with live LAN-direct credentials returns three sites
+      operations from the loaded local spec (Network 10.3.58),
+      including the freshly compacted tag accessor `aclRules`
+      (formerly `accessControlAclRules`) — confirming the cache-
+      schema-version bump (CACHE_SCHEMA_VERSION = 2 in
+      src/spec/loader.ts) correctly invalidates stale processed-spec
+      caches when the index shape changes.
+    – `execute` with live LAN-direct credentials returns the live
+      site count `1`, matching every previous LAN-direct verification
+      (discover-local.ts, opencode/DeepSeek end-to-end).
+  ✓ The tool descriptors that flow back through Inspector are the
+    same ones the LLM clients see. This validates the user-facing
+    descriptions for both tools — protocol-level correctness without
+    needing an LLM in the loop.
+  ✓ TLS-insecure handling is consistent: the Inspector run surfaced
+    the same `[unifi.local] TLS verification disabled (insecure mode)`
+    warning seen in the cursor-agent and opencode runs.
+
+WHAT THIS DOES NOT PROVE
+  ✗ The Inspector UI mode (browser-based debugger). Only the CLI
+    transport was exercised here.
+  ✗ HTTP / SSE transports. We only tested stdio.
+  ✗ Latency under sustained load.
+
+INSPECTOR VERSION CAVEAT
+  We pinned to @modelcontextprotocol/inspector@0.20.0 because the
+  current latest (0.21.2) has a missing-`commander` dependency error
+  on Node.js v25 (see https://github.com/modelcontextprotocol/inspector
+  for tracking). Either pinning to v0.20.0 OR explicitly installing
+  `commander` alongside v0.21.2 works around the bug.
+
+CACHE-SCHEMA-VERSION FINDING
+  During this verification we discovered that our previously cached
+  ProcessedSpec on disk (`src/spec/cache/local-v10.3.58.json` etc.)
+  embeds the OUTPUT of `buildOperationIndex` — including pre-baked
+  `primaryTag` strings. So a change to `normalizeTag` (like the tag-
+  name compaction landed earlier today) was invisible to anyone with
+  a stale cache.
+  Fix included in this run: src/spec/loader.ts now writes a
+  `cacheSchemaVersion` field into each cache envelope, and reads with
+  a strict version check. CACHE_SCHEMA_VERSION = 2 invalidates every
+  pre-compaction cache; bump on any future change to
+  `buildOperationIndex` or `processSpec` shape.
+  This was a real bug only the Inspector exposed: the local discover
+  scripts fetch fresh on every run (forceRefresh defaulted off but
+  in our flow we kept getting fresh-fetches because we'd been
+  manually deleting the cache directory between iterations).
+
+EXACT INVOCATIONS
+
+  >>> 1. tools/list (no credentials)
+  $ npx @modelcontextprotocol/inspector@0.20.0 --cli --transport stdio \
+        -- node dist/index.js --method tools/list
+
+  Result:
+    - tool: 'search'   (input.required: ['code'])
+    - tool: 'execute'  (input.required: ['code'])
+    Full descriptors include titles, multi-paragraph descriptions
+    (the same text that LLM clients see in their system prompts),
+    and JSON Schema for the single 'code' input.
+
+  >>> 2. tools/call execute (no credentials, sandbox-only)
+  $ npx @modelcontextprotocol/inspector@0.20.0 --cli --transport stdio \
+        -- node dist/index.js --method tools/call --tool-name execute \
+        --tool-arg "code=({ surfaces: Object.keys(unifi).filter(function(k){return k!=='__missing'}) })"
+
+  Result:
+    {
+      "surfaces": [ "local", "cloud" ]
+    }
+    --- Executed in 48ms ---
+    isError: false
+
+  >>> 3. tools/call search WITH live local credentials
+  $ npx @modelcontextprotocol/inspector@0.20.0 --cli --transport stdio \
+        -e "UNIFI_LOCAL_BASE_URL=https://172.27.1.1" \
+        -e "UNIFI_LOCAL_API_KEY=<redacted>" \
+        -e "UNIFI_LOCAL_INSECURE=true" \
+        -- node dist/index.js --method tools/call --tool-name search \
+        --tool-arg "code=searchOperations('local', 'site', 3)"
+
+  Result (first three hits, demonstrating compacted tags):
+    - GET  /v1/sites                                  tag='sites'                op='getSiteOverviewPage'
+    - GET  /v1/sites/{siteId}/vpn/site-to-site-tunnels tag='supportingResources' op='getSiteToSiteVpnTunnelPage'
+    - GET  /v1/sites/{siteId}/acl-rules               tag='aclRules'             op='getAclRulePage'
+    --- Executed in 22ms ---
+    isError: false
+
+  >>> 4. tools/call execute WITH live local credentials
+  $ npx @modelcontextprotocol/inspector@0.20.0 --cli --transport stdio \
+        -e "UNIFI_LOCAL_BASE_URL=https://172.27.1.1" \
+        -e "UNIFI_LOCAL_API_KEY=<redacted>" \
+        -e "UNIFI_LOCAL_INSECURE=true" \
+        -- node dist/index.js --method tools/call --tool-name execute \
+        --tool-arg "code=unifi.local.callOperation('getSiteOverviewPage').data.length"
+
+  Result:
+    --- Warnings ---
+    [warn] [unifi.local] TLS verification disabled (insecure mode).
+                         Provide a custom CA bundle in production.
+    1
+    --- Executed in 91ms · 1 API calls ---
+    isError: false
+
+PROBE METADATA
+  Controller:  UDM-Pro on UniFi OS, Network application 10.3.58
+                (LAN-direct, 172.27.1.1)
+  Surface:     unifi.local.* (LAN-direct, NOT cloud-proxied)
+  Inspector:   @modelcontextprotocol/inspector@0.20.0 in CLI mode
+  Server:      node dist/index.js (stdio)
+  TLS:         UNIFI_LOCAL_INSECURE=true (UDM self-signed)
+
+REPRODUCER
+  $ # In the project root, after `npm run build`:
+  $ rm -rf src/spec/cache  # only if upgrading from a pre-cache-v2 install
+  $ npm run build
+  $ KEY="$(op read 'op://AI Agents/Unifi local api key/password')"  # or your equivalent
+  $ npx @modelcontextprotocol/inspector@0.20.0 --cli --transport stdio \
+        -e "UNIFI_LOCAL_BASE_URL=https://172.27.1.1" \
+        -e "UNIFI_LOCAL_API_KEY=$KEY" \
+        -e "UNIFI_LOCAL_INSECURE=true" \
+        -- node dist/index.js --method tools/list
+  $ # Then any of the tools/call invocations above.
+================================================================================

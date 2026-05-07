@@ -574,11 +574,33 @@ function buildDispatcher(
   return undefined;
 }
 
+/**
+ * Bump this whenever the shape produced by `buildOperationIndex` or
+ * `processSpec` changes in a way that would make stale on-disk caches
+ * misleading. A mismatch causes `readCacheFile` to ignore the cache
+ * and refetch from upstream.
+ *
+ * History:
+ *   v1 — initial cache schema (implicit)
+ *   v2 — tag-name compaction (2026-05-07): primaryTag now strips
+ *        common API-doc boilerplate suffixes
+ */
+const CACHE_SCHEMA_VERSION = 2;
+
+interface CacheEnvelope extends ProcessedSpec {
+  cacheSchemaVersion?: number;
+}
+
 async function readCacheFile(path: string): Promise<ProcessedSpec | undefined> {
   if (!existsSync(path)) return undefined;
   try {
     const raw = await readFile(path, 'utf-8');
-    return JSON.parse(raw) as ProcessedSpec;
+    const parsed = JSON.parse(raw) as CacheEnvelope;
+    if (parsed.cacheSchemaVersion !== CACHE_SCHEMA_VERSION) {
+      return undefined;
+    }
+    const { cacheSchemaVersion: _v, ...spec } = parsed;
+    return spec;
   } catch {
     return undefined;
   }
@@ -586,7 +608,8 @@ async function readCacheFile(path: string): Promise<ProcessedSpec | undefined> {
 
 async function writeCacheFile(path: string, spec: ProcessedSpec): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(spec), 'utf-8');
+  const envelope: CacheEnvelope = { ...spec, cacheSchemaVersion: CACHE_SCHEMA_VERSION };
+  await writeFile(path, JSON.stringify(envelope), 'utf-8');
 }
 
 async function readFallbackSpec(): Promise<OpenApiDocument> {

@@ -364,29 +364,60 @@ or to a `.clinerules/` directory with multiple files.
 
 ---
 
-## MCP Inspector — NOT-VERIFIED (but this is the easiest smoke test)
+## MCP Inspector — ✅ VERIFIED (CLI mode v0.20.0, 2026-05-07)
 
 The official [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
 is the fastest way to verify the protocol layer of any MCP server
-without involving an LLM:
+without involving an LLM. We've live-verified the CLI mode against a
+real UDM-Pro running Network 10.3.58 — all four phases pass
+(`tools/list`, `tools/call execute` without creds, `tools/call search`
+with creds, `tools/call execute` with creds returning live site
+count). Sanitized transcript at
+[`out/verification/mcp-inspector-live-smoke.txt`](../../out/verification/mcp-inspector-live-smoke.txt).
+
+### CLI mode (best for headless verification)
 
 ```bash
-npx @modelcontextprotocol/inspector node /absolute/path/to/unifi-code-mode-mcp/dist/index.js
+# Pin to v0.20.0 — the current latest (0.21.2) has a missing-`commander`
+# dependency error on Node.js v25. Tracking issue:
+#   https://github.com/modelcontextprotocol/inspector
+npx @modelcontextprotocol/inspector@0.20.0 --cli --transport stdio \
+    -e "UNIFI_LOCAL_BASE_URL=https://<your-controller>" \
+    -e "UNIFI_LOCAL_API_KEY=<your-local-key>" \
+    -e "UNIFI_LOCAL_INSECURE=true" \
+    -- node /absolute/path/to/unifi-code-mode-mcp/dist/index.js \
+    --method tools/list
+
+# Or call a tool directly:
+... \
+    --method tools/call --tool-name search \
+    --tool-arg "code=searchOperations('local', 'site', 3)"
+```
+
+### UI mode (browser-based debugger)
+
+```bash
+npx @modelcontextprotocol/inspector@0.20.0 \
+    -- node /absolute/path/to/unifi-code-mode-mcp/dist/index.js
 ```
 
 This opens a browser UI where you can call `search` and `execute`
-manually. Useful for:
+manually. **The UI mode itself is NOT-VERIFIED yet** — only the CLI
+mode has been driven end-to-end. Useful for:
 
 - Confirming the server starts and registers tools
 - Calling `search` against your real catalogue
 - Running specific JS through `execute` to debug a script before you
   hand it to an LLM
 
-There's no LLM involved, so there's no persona — but it's the gold-
-standard "did the server load my OpenAPI specs" smoke test.
+There's no LLM involved, so there's no persona to load — but it's the
+gold-standard "did the server load my OpenAPI specs" smoke test, and
+the easiest way to debug a `search`/`execute` round-trip in
+isolation.
 
-**Please file a verification report** if you find a regression here —
-this is the most useful single test we can ship.
+**Please file a verification report** if you find a regression in the
+UI mode, or with non-stdio transports (HTTP / SSE) — those paths are
+still unverified.
 
 ---
 
