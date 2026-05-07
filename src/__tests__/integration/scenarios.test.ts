@@ -24,6 +24,7 @@ import {
 } from './harness.js';
 import {
   DEVICES_PAGE,
+  PROTECT_CAMERA_FRONT_ID,
   SITES_PAGE,
   SITE_ID,
   WIFI_HOME_ID,
@@ -145,6 +146,49 @@ describe.each(TRANSPORT_MODES)('integration (%s transport)', (mode) => {
     expect(put).toBeDefined();
     const body = put?.body as { securityConfiguration?: { passphrase?: string } } | undefined;
     expect(body?.securityConfiguration?.passphrase).toBe('rotated-passphrase-9999');
+  });
+
+  // ─── Scenario D — Protect surface (when enabled) ──────────────────
+
+  it('D: drives the Protect surface end-to-end via unifi.local.protect', async () => {
+    await harness.cleanup();
+    harness = await setupHarness({ mode, withProtect: true });
+
+    const search = await callTool(
+      harness,
+      'search',
+      `searchOperations('protect', 'camera', 5).map(function (o) { return o.operationId; })`,
+    );
+    expect(search.isError).toBeFalsy();
+    expect(toolResultText(search)).toContain('listCameras');
+    expect(toolResultText(search)).toContain('getCamera');
+
+    const code = `
+      var meta = unifi.local.protect.callOperation('getProtectMetaInfo', {});
+      var cameras = unifi.local.protect.cameras.listCameras({});
+      var first = unifi.local.protect.cameras.getCamera({ id: ${JSON.stringify(PROTECT_CAMERA_FRONT_ID)} });
+      ({
+        protectVersion: meta.applicationVersion,
+        cameraCount: cameras.data.length,
+        firstCameraName: first.name,
+      });
+    `;
+
+    const exec = await callTool(harness, 'execute', code);
+    expect(exec.isError).toBeFalsy();
+    const text = toolResultText(exec);
+    expect(text).toContain('"protectVersion": "7.1.46-test"');
+    expect(text).toContain('"cameraCount": 2');
+    expect(text).toContain('"firstCameraName": "Front Door"');
+
+    const calls = harness.controller.requests.map(
+      (r) => `${r.method} ${r.path.split('?')[0] ?? ''}`,
+    );
+    expect(calls).toContain('GET /proxy/protect/integration/v1/meta/info');
+    expect(calls).toContain('GET /proxy/protect/integration/v1/cameras');
+    expect(calls).toContain(
+      `GET /proxy/protect/integration/v1/cameras/${PROTECT_CAMERA_FRONT_ID}`,
+    );
   });
 
   // ─── Scenario C — intentionally impossible ────────────────────────

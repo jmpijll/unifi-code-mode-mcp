@@ -3,10 +3,14 @@
  *
  * Always strict TLS — `api.ui.com` uses a publicly trusted certificate.
  *
- * Two flavors:
+ * Three flavors:
  *   - createCloudClient(): native Site Manager endpoints (/v1/hosts, /v1/sites, …)
  *   - createCloudNetworkProxyClient(): Network Integration API tunneled through the
  *     Site Manager connector at /v1/connector/consoles/{consoleId}/proxy/network/integration.
+ *   - createCloudProtectProxyClient(): Protect Integration API tunneled through the
+ *     same connector at /v1/connector/consoles/{consoleId}/proxy/protect/integration.
+ *     UNVERIFIED against a real Protect-enabled console — Ubiquiti has not documented
+ *     this surface; we expose it on the assumption it follows the Network pattern.
  */
 
 import { HttpClient } from './http.js';
@@ -55,6 +59,38 @@ export function createCloudNetworkProxyClient(
     pathPrefix: `/v1/connector/consoles/${safeConsoleId}/proxy/network/integration`,
     apiKey: creds.apiKey,
     label: `unifi.cloud.network[${consoleId}]`,
+    onWarn: opts.onWarn,
+  });
+}
+
+/**
+ * Build a cloud client that proxies Protect Integration API calls through
+ * the Site Manager connector. Structurally identical to
+ * createCloudNetworkProxyClient, but the path prefix targets the Protect
+ * application:
+ *   /v1/connector/consoles/{consoleId}/proxy/protect/integration
+ *
+ * UNVERIFIED — Ubiquiti has not publicly documented that the connector
+ * supports proxying Protect, only Network. This factory is shipped on the
+ * assumption that the connector is application-agnostic. If it turns out
+ * to be Network-only, calls will fail with a clear HTTP error.
+ */
+export function createCloudProtectProxyClient(
+  creds: CloudTenantCreds,
+  consoleId: string,
+  opts: CloudClientOptions = {},
+): HttpClient {
+  if (!consoleId || typeof consoleId !== 'string') {
+    throw new Error(
+      'createCloudProtectProxyClient: consoleId is required (the host id from unifi.ui.com/consoles/<id>).',
+    );
+  }
+  const safeConsoleId = encodeURIComponent(consoleId);
+  return new HttpClient({
+    baseUrl: creds.baseUrl,
+    pathPrefix: `/v1/connector/consoles/${safeConsoleId}/proxy/protect/integration`,
+    apiKey: creds.apiKey,
+    label: `unifi.cloud.protect[${consoleId}]`,
     onWarn: opts.onWarn,
   });
 }

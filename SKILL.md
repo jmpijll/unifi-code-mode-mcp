@@ -26,22 +26,30 @@ You always start with `search` to find the operationIds you need, then
 `execute` to call them. **Never invent operationIds** — always confirm with
 `search` first; the spec changes per controller version.
 
-## 2. Three sandbox surfaces
+## 2. Five sandbox surfaces
 
-Inside `execute`, the global `unifi` namespace exposes three surfaces:
+Inside `execute`, the global `unifi` namespace exposes up to five surfaces.
+Any surface may be missing if its credentials or spec are not configured —
+check `unifi.<surface>.spec` for `{ title, version, sourceUrl }` before
+relying on it.
 
 | Surface | Reaches | Credentials |
 |---|---|---|
 | `unifi.local.*` | A local UniFi controller's Network Integration API (`https://<controller>/proxy/network/integration/v1/...`). | Local API key. |
 | `unifi.cloud.*` | UniFi Site Manager (`https://api.ui.com/v1/...`). | Cloud API key. |
 | `unifi.cloud.network(consoleId).*` | The Network Integration API of a remote console, **proxied through Site Manager** (`/v1/connector/consoles/{id}/proxy/network/integration`). | **Cloud** API key only. |
+| `unifi.local.protect.*` | A local controller's UniFi Protect Integration API (`https://<controller>/proxy/protect/integration/v1/...`) — cameras, NVRs, sensors, lights, alarm hubs, sirens, viewers, live-views, users. | Local API key (Protect must be installed on the controller). |
+| `unifi.cloud.protect(consoleId).*` | Protect Integration API tunneled through the Site Manager connector at `/v1/connector/consoles/{id}/proxy/protect/integration`. **UNVERIFIED** against a real Protect-enabled console. | Cloud API key only. |
 
 Pick the surface based on what the user has:
 
-- **Local controller, on the same LAN as the MCP host.** → `unifi.local`.
+- **Local controller, on the same LAN as the MCP host, Network only.** → `unifi.local`.
+- **Local controller, with Protect installed.** → `unifi.local` for Network, `unifi.local.protect` for cameras/sensors/lights/etc.
 - **Cloud-managed console, you only have a cloud API key.** →
   `unifi.cloud.network(consoleId)` for Network ops; `unifi.cloud` for
-  Site-Manager-only ops (multi-console listing, ISP metrics, SD-WAN).
+  Site-Manager-only ops (multi-console listing, ISP metrics, SD-WAN);
+  `unifi.cloud.protect(consoleId)` for Protect (treat as best-effort —
+  see §10).
 - **Multiple consoles under one Site Manager account.** → discover them
   with `unifi.cloud.callOperation('listHosts')` (or
   `request('GET', '/v1/hosts')`) and then build per-console proxies.
@@ -236,6 +244,35 @@ unifi.local.callOperation('updateWifiBroadcast', {
 });
 ```
 
+### 9.6 Inventory Protect cameras and pull a single camera detail
+
+```js
+// Local Protect — works whenever the controller has Protect installed.
+const meta = unifi.local.protect.callOperation('getProtectMetaInfo', {});
+const cams = unifi.local.protect.cameras.listCameras({});
+const detail = cams.data.length > 0
+  ? unifi.local.protect.cameras.getCamera({ id: cams.data[0].id })
+  : null;
+({
+  protectVersion: meta.applicationVersion,
+  cameraCount: cams.data.length,
+  firstCamera: detail ? { name: detail.name, model: detail.type, state: detail.state } : null,
+});
+```
+
+For the cloud-proxied variant (treat as best-effort):
+
+```js
+const protect = unifi.cloud.protect(consoleId);
+const cameras = protect.callOperation('listCameras', {});
+cameras.data.length;
+```
+
+If `unifi.cloud.protect()` returns `[unifi.cloud.protect.http] 404` or
+similar against a real console, that's the signal that Ubiquiti's cloud
+connector does not yet proxy Protect — fall back to `unifi.local.protect`
+through a direct controller connection.
+
 ## 10. Caveats and known unknowns
 
 - **OpenAPI version drift is normal.** Ubiquiti's CDN only hosts a few
@@ -250,22 +287,38 @@ unifi.local.callOperation('updateWifiBroadcast', {
   legacy rule-based firewall and the v1 surface can't enumerate the
   individual rules. Don't claim "no rules exist" — claim "the API
   doesn't expose them on this site".
-- **What v1 Integration does *not* expose:** legacy firewall rules,
-  DHCP options, port profiles, PoE profiles, mDNS reflector, rogue-AP
-  scan results, RADIUS clients (the binding is exposed; secrets are not),
-  WireGuard peer lists, Talk/Protect/Access state.
+- **What the Network v1 Integration API does *not* expose:** legacy
+  firewall rules, DHCP options, port profiles, PoE profiles, mDNS
+  reflector, rogue-AP scan results, RADIUS clients (the binding is
+  exposed; secrets are not), WireGuard peer lists, Talk/Access state.
+  Protect is exposed via its own Integration API at
+  `/proxy/protect/integration/v1/...` (use `unifi.local.protect`).
+- **Protect surfaces are partially verified.** The bundled spec is a
+  curated ~25-operation fragment hand-written from publicly observable
+  controller behaviour; the full surface (alarm-manager webhooks,
+  files, fobs, link-stations, relays, speakers, ULP users, subscribe/*
+  WebSockets, talk-back, RTSPS streaming) is not in scope. To broaden
+  it, ask the operator to set `UNIFI_PROTECT_SPEC_URL=<full-spec>`.
+  `unifi.cloud.protect(consoleId)` is structurally analogous to
+  `unifi.cloud.network`, but Ubiquiti has not publicly documented that
+  the Site Manager connector proxies Protect — treat it as best-effort
+  and degrade to `unifi.local.protect` if the connector returns 404.
 - **Snapshots in this repo's `out/` folder contain MAC and IP material**
   and are gitignored. Do not paste them into chats unless the user is
   the network owner.
-- **Pre-1.0 client coverage is narrow.** The MCP wire protocol has been
-  verified end-to-end with Claude Sonnet 4.6 driving the server through
-  `cursor-agent` in interactive mode (see
-  [README → Verification status](README.md#verification-status)). It
-  has *not* yet been validated against Cursor IDE chat panel, Claude
-  Desktop, Continue, Cline, Codeium, Aider, Zed, or the MCP Inspector
-  UI. If you find a client where the server misbehaves, open an issue
-  with the protocol log; the server itself is wire-correct, so most
-  surprises will be in client wiring or env-var passing.
+- **Pre-1.0 client coverage is narrow.** The MCP wire protocol has
+  been verified end-to-end with two clients:
+  - Claude Sonnet 4.6 through `cursor-agent` interactive PTY mode.
+  - DeepSeek v4 Flash through `opencode --pure run`.
+
+  See [README → Verification status](README.md#verification-status)
+  for the matrix and known per-client gotchas (`docs/cursor-skill.md`
+  §8 and `docs/opencode-skill.md` §6). It has *not* yet been validated
+  against the Cursor IDE chat panel, Claude Desktop, Continue, Cline,
+  Codeium, Aider, Zed, or the MCP Inspector UI. If you find a client
+  where the server misbehaves, open an issue with the protocol log;
+  the server itself is wire-correct, so most surprises will be in
+  client wiring or env-var passing.
 
 ## 11. Where to look for more
 

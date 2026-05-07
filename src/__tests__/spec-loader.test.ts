@@ -13,9 +13,8 @@ vi.mock('undici', async () => {
   };
 });
 
-const { clearSpecCache, KNOWN_NETWORK_SPEC_VERSIONS, loadLocalSpec } = await import(
-  '../spec/loader.js'
-);
+const { clearSpecCache, KNOWN_NETWORK_SPEC_VERSIONS, loadLocalSpec, loadProtectSpec } =
+  await import('../spec/loader.js');
 
 const MOCK_SPEC = {
   openapi: '3.0.0',
@@ -131,5 +130,89 @@ describe('loadLocalSpec', () => {
       cacheDir,
     });
     expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
+  });
+});
+
+describe('loadProtectSpec', () => {
+  const MOCK_PROTECT_SPEC = {
+    openapi: '3.1.0',
+    info: { title: 'UniFi Protect API', version: '7.1.46' },
+    paths: {
+      '/v1/cameras': {
+        get: { operationId: 'listCameras', tags: ['cameras'], summary: 'List cameras' },
+      },
+    },
+  };
+
+  it('falls back to the bundled curated spec when no URL resolves', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response('nope', { status: 404 })));
+    const warnings: string[] = [];
+    const spec = await loadProtectSpec({
+      cacheDir,
+      onWarn: (msg) => warnings.push(msg),
+    });
+    expect(spec.title).toMatch(/Protect/i);
+    expect(spec.sourceUrl).toBe('embedded:protect-fallback.json');
+    expect(spec.operations.length).toBeGreaterThan(0);
+    expect(spec.operations.some((op) => op.operationId === 'listCameras')).toBe(true);
+    expect(warnings.some((w) => /curated Protect fallback/i.test(w))).toBe(true);
+  });
+
+  it('honours specUrlOverride and skips version discovery', async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes('override')) return Promise.resolve(jsonResponse(MOCK_PROTECT_SPEC));
+      return Promise.reject(new Error(`unexpected fetch: ${String(url)}`));
+    });
+    const spec = await loadProtectSpec({
+      cacheDir,
+      specUrlOverride: 'https://example.test/override/protect.json',
+    });
+    expect(spec.title).toBe('UniFi Protect Integration API');
+    expect(spec.version).toBe('7.1.46');
+    expect(spec.operations).toHaveLength(1);
+    // Should NOT have probed the controller for /v1/meta/info.
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/v1/meta/info'))).toBe(false);
+  });
+
+  it('uses /proxy/protect/integration/v1/meta/info to discover the version', async () => {
+    fetchMock.mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes('/proxy/protect/integration/v1/meta/info')) {
+        return Promise.resolve(jsonResponse({ applicationVersion: '7.1.46' }));
+      }
+      if (u.includes('apidoc-cdn.ui.com/protect/v7.1.46/integration.json')) {
+        return Promise.resolve(jsonResponse(MOCK_PROTECT_SPEC));
+      }
+      return Promise.resolve(new Response('nope', { status: 404 }));
+    });
+    const spec = await loadProtectSpec({
+      baseUrl: 'https://controller.example',
+      apiKey: 'k',
+      cacheDir,
+    });
+    expect(spec.version).toBe('7.1.46');
+    expect(
+      fetchMock.mock.calls.some(([u]) =>
+        String(u).includes('/proxy/protect/integration/v1/meta/info'),
+      ),
+    ).toBe(true);
+  });
+
+  it('only attempts the beezly URL when allowBeezlyFallback is true', async () => {
+    let beezlyAttempted = false;
+    fetchMock.mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes('beezly')) beezlyAttempted = true;
+      return Promise.resolve(new Response('nope', { status: 404 }));
+    });
+
+    await loadProtectSpec({ cacheDir });
+    expect(beezlyAttempted).toBe(false);
+
+    fetchMock.mockClear();
+    beezlyAttempted = false;
+    clearSpecCache();
+    await loadProtectSpec({ cacheDir, allowBeezlyFallback: true });
+    expect(beezlyAttempted).toBe(true);
   });
 });

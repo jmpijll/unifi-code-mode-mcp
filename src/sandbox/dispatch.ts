@@ -133,10 +133,13 @@ function routeArgsToRequest(op: IndexedOperation, args: DispatchOperationArgs): 
  * Build a JS prelude that creates the `unifi` namespace at sandbox init time.
  *
  * Output shape:
- *   unifi.local.<tag>.<operationId>(args) -> Promise          // direct to controller
+ *   unifi.local.<tag>.<operationId>(args) -> Promise          // direct to controller (Network)
  *   unifi.local.callOperation(operationId, args) -> Promise
  *   unifi.local.request({ method, path, ... }) -> Promise
  *   unifi.local.spec -> { title, version, sourceUrl }
+ *
+ *   unifi.local.protect.<tag>.<operationId>(args) -> Promise  // direct to controller (Protect)
+ *   unifi.local.protect.callOperation, request, spec
  *
  *   unifi.cloud.<tag>.<operationId>(args) -> Promise          // Site Manager native
  *   unifi.cloud.callOperation(operationId, args) -> Promise
@@ -147,17 +150,28 @@ function routeArgsToRequest(op: IndexedOperation, args: DispatchOperationArgs): 
  *     <tag>.<operationId>(args) -> Promise,
  *     callOperation, request, spec, consoleId
  *   }
+ *   unifi.cloud.protect(consoleId) -> {                       // Protect Integration via cloud proxy
+ *     <tag>.<operationId>(args) -> Promise,
+ *     callOperation, request, spec, consoleId
+ *   }
  *   unifi.cloud.consoles -> [list of known console ids, if any]
  *
  * The functions delegate to host-side bindings injected separately:
  *   __unifiCallLocal, __unifiRawLocal,
  *   __unifiCallCloud, __unifiRawCloud,
- *   __unifiCallCloudNetwork, __unifiRawCloudNetwork
+ *   __unifiCallCloudNetwork, __unifiRawCloudNetwork,
+ *   __unifiCallLocalProtect, __unifiRawLocalProtect,
+ *   __unifiCallCloudProtect, __unifiRawCloudProtect
  */
 export function buildUnifiPrelude(
   localSpec?: ProcessedSpec,
   cloudSpec?: ProcessedSpec,
-  options: { exposeCloudNetworkProxy?: boolean } = {},
+  options: {
+    exposeCloudNetworkProxy?: boolean;
+    protectSpec?: ProcessedSpec;
+    exposeLocalProtect?: boolean;
+    exposeCloudProtectProxy?: boolean;
+  } = {},
 ): string {
   const lines: string[] = [];
   lines.push('var unifi = {};');
@@ -178,6 +192,17 @@ export function buildUnifiPrelude(
   // We only attach it when a local spec is available; the cloud key is checked at call time.
   if (options.exposeCloudNetworkProxy && localSpec) {
     lines.push(buildCloudNetworkProxyPrelude(localSpec));
+  }
+
+  // Protect surfaces — both local and cloud-proxied — share the same
+  // Protect spec for operation lookups but route to different host bindings.
+  if (options.protectSpec) {
+    if (options.exposeLocalProtect) {
+      lines.push(buildLocalProtectPrelude(options.protectSpec));
+    }
+    if (options.exposeCloudProtectProxy) {
+      lines.push(buildCloudProtectProxyPrelude(options.protectSpec));
+    }
   }
 
   return lines.join('\n');
@@ -289,6 +314,128 @@ function buildCloudNetworkProxyPrelude(localSpec: ProcessedSpec): string {
     '    }',
     '    if (cache[consoleId]) return cache[consoleId];',
     '    cache[consoleId] = buildProxyForConsole(consoleId);',
+    '    return cache[consoleId];',
+    '  };',
+    '})();',
+  ].join('\n');
+}
+
+/**
+ * Local Protect: emits `unifi.local.protect.*` using the same Protect spec.
+ *
+ * Routes through host bindings `__unifiCallLocalProtect(opId, argsJson)` and
+ * `__unifiRawLocalProtect(argsJson)`.
+ */
+function buildLocalProtectPrelude(protectSpec: ProcessedSpec): string {
+  const groups = new Map<string, IndexedOperation[]>();
+  for (const op of protectSpec.operations) {
+    const key = op.primaryTag || 'default';
+    const arr = groups.get(key) ?? [];
+    arr.push(op);
+    groups.set(key, arr);
+  }
+
+  const lines: string[] = [];
+  lines.push('(function() {');
+  lines.push('  if (typeof unifi.local !== "object" || unifi.local === null) {');
+  lines.push('    unifi.local = {};');
+  lines.push('  }');
+  lines.push('  var protectNs = {');
+  lines.push(`    spec: ${JSON.stringify({
+    title: protectSpec.title,
+    version: protectSpec.version,
+    sourceUrl: protectSpec.sourceUrl,
+    operationCount: protectSpec.operations.length,
+  })},`);
+  lines.push(
+    '    request: function(args) { return __unifiRawLocalProtect(JSON.stringify(args || {})); },',
+  );
+  lines.push(
+    '    callOperation: function(opId, args) { return __unifiCallLocalProtect(opId, JSON.stringify(args || {})); }',
+  );
+  lines.push('  };');
+
+  for (const [tag, ops] of groups) {
+    const safeTag = sanitizeIdentifier(tag);
+    // Avoid colliding with the protectNs.spec / request / callOperation
+    // properties we just defined.
+    if (safeTag === 'spec' || safeTag === 'request' || safeTag === 'callOperation') continue;
+    lines.push(`  protectNs.${safeTag} = {};`);
+    for (const op of ops) {
+      const methodName = sanitizeIdentifier(op.operationId);
+      lines.push(
+        `  protectNs.${safeTag}.${methodName} = function(args) { return __unifiCallLocalProtect(${JSON.stringify(op.operationId)}, JSON.stringify(args || {})); };`,
+      );
+    }
+  }
+
+  lines.push('  unifi.local.protect = protectNs;');
+  lines.push('})();');
+
+  return lines.join('\n');
+}
+
+/**
+ * Cloud→Protect proxy: emits a `unifi.cloud.protect(consoleId)` factory.
+ * Identical structure to `unifi.cloud.network()` but routed through host
+ * bindings `__unifiCallCloudProtect(consoleId, opId, argsJson)` and
+ * `__unifiRawCloudProtect(consoleId, argsJson)`.
+ */
+function buildCloudProtectProxyPrelude(protectSpec: ProcessedSpec): string {
+  const groups = new Map<string, IndexedOperation[]>();
+  for (const op of protectSpec.operations) {
+    const key = op.primaryTag || 'default';
+    const arr = groups.get(key) ?? [];
+    arr.push(op);
+    groups.set(key, arr);
+  }
+
+  const operationFactoryLines: string[] = [];
+  operationFactoryLines.push('  function buildProtectProxyForConsole(consoleId) {');
+  operationFactoryLines.push('    var ns = {');
+  operationFactoryLines.push(`      spec: ${JSON.stringify({
+    title: protectSpec.title,
+    version: protectSpec.version,
+    sourceUrl: protectSpec.sourceUrl,
+    operationCount: protectSpec.operations.length,
+  })},`);
+  operationFactoryLines.push('      consoleId: consoleId,');
+  operationFactoryLines.push(
+    '      request: function(args) { return __unifiRawCloudProtect(consoleId, JSON.stringify(args || {})); },',
+  );
+  operationFactoryLines.push(
+    '      callOperation: function(opId, args) { return __unifiCallCloudProtect(consoleId, opId, JSON.stringify(args || {})); }',
+  );
+  operationFactoryLines.push('    };');
+
+  for (const [tag, ops] of groups) {
+    const safeTag = sanitizeIdentifier(tag);
+    if (safeTag === 'spec' || safeTag === 'request' || safeTag === 'callOperation') continue;
+    operationFactoryLines.push(`    ns.${safeTag} = {};`);
+    for (const op of ops) {
+      const methodName = sanitizeIdentifier(op.operationId);
+      operationFactoryLines.push(
+        `    ns.${safeTag}.${methodName} = function(args) { return __unifiCallCloudProtect(consoleId, ${JSON.stringify(op.operationId)}, JSON.stringify(args || {})); };`,
+      );
+    }
+  }
+
+  operationFactoryLines.push('    return ns;');
+  operationFactoryLines.push('  }');
+
+  return [
+    '(function() {',
+    '  if (typeof unifi.cloud !== "object" || unifi.cloud === null || unifi.cloud.__missing) {',
+    '    return; // cloud namespace not available; nothing to attach',
+    '  }',
+    '  var cache = {};',
+    ...operationFactoryLines,
+    '  unifi.cloud.protect = function(consoleId) {',
+    '    if (typeof consoleId !== "string" || consoleId.length === 0) {',
+    '      throw new Error("unifi.cloud.protect(consoleId): consoleId must be a non-empty string. Find it in https://unifi.ui.com/consoles/<id>/.");',
+    '    }',
+    '    if (cache[consoleId]) return cache[consoleId];',
+    '    cache[consoleId] = buildProtectProxyForConsole(consoleId);',
     '    return cache[consoleId];',
     '  };',
     '})();',

@@ -1,6 +1,10 @@
 export { HttpClient, substitutePathParams, buildQueryString } from './http.js';
-export { createLocalClient } from './local.js';
-export { createCloudClient, createCloudNetworkProxyClient } from './cloud.js';
+export { createLocalClient, createLocalProtectClient } from './local.js';
+export {
+  createCloudClient,
+  createCloudNetworkProxyClient,
+  createCloudProtectProxyClient,
+} from './cloud.js';
 export {
   UnifiHttpError,
   UnifiTransportError,
