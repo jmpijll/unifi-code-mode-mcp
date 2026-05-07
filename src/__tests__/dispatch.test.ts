@@ -454,6 +454,95 @@ describe('buildUnifiPrelude', () => {
       { opId: 'listNvrs', argsJson: '{}' },
     ]);
   });
+
+  it('attaches cloud.network() factory even when no cloud Site Manager spec is loaded', () => {
+    // Cloud-Network proxy is independent of cloudSpec — it reuses Network operation
+    // shapes from the local spec. Regression test for the gating bug found during the
+    // 2026-05-07 live recon (cloud.network() was missing whenever cloudSpec was absent).
+    const prelude = buildUnifiPrelude(SPEC, undefined, { exposeCloudNetworkProxy: true });
+    expect(prelude).toContain('unifi.cloud.network = function');
+    expect(prelude).toContain('__unifiCallCloudNetwork');
+    expect(() => new Function(prelude)).not.toThrow();
+  });
+
+  it('cloud.network() works at runtime without a cloud Site Manager spec', () => {
+    const prelude = buildUnifiPrelude(SPEC, undefined, { exposeCloudNetworkProxy: true });
+    const networkProxyCalls: Array<{ consoleId: string; opId: string }> = [];
+    type SandboxScope = { unifi?: { cloud: { network: (id: string) => Record<string, Record<string, (args: unknown) => unknown>> } } };
+    const fn = new Function(
+      '__unifiCallLocal',
+      '__unifiRawLocal',
+      '__unifiCallCloud',
+      '__unifiRawCloud',
+      '__unifiCallCloudNetwork',
+      '__unifiRawCloudNetwork',
+      `${prelude}\nreturn unifi;`,
+    ) as (...args: unknown[]) => SandboxScope['unifi'];
+    const unifi = fn(
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      (consoleId: string, opId: string) => {
+        networkProxyCalls.push({ consoleId, opId });
+        return { ok: true };
+      },
+      () => undefined,
+    );
+    const handle = unifi!.cloud.network('console-A');
+    handle['sites']!['getSite']!({ siteId: 'abc' });
+    expect(networkProxyCalls).toEqual([{ consoleId: 'console-A', opId: 'getSite' }]);
+  });
+
+  it('attaches cloud.protect() factory even when no cloud Site Manager spec is loaded', () => {
+    // Cloud-Protect proxy is independent of cloudSpec — it uses the Protect spec.
+    // Regression test for the gating bug found during the 2026-05-07 live recon
+    // (cloud.protect() was missing whenever cloudSpec was absent, which broke the
+    // intended Protect-only deployment shape).
+    const prelude = buildUnifiPrelude(SPEC, undefined, {
+      protectSpec: PROTECT_SPEC,
+      exposeCloudProtectProxy: true,
+    });
+    expect(prelude).toContain('unifi.cloud.protect = function');
+    expect(prelude).toContain('__unifiCallCloudProtect');
+    expect(() => new Function(prelude)).not.toThrow();
+  });
+
+  it('cloud.protect() works at runtime without a cloud Site Manager spec', () => {
+    const prelude = buildUnifiPrelude(undefined, undefined, {
+      protectSpec: PROTECT_SPEC,
+      exposeCloudProtectProxy: true,
+    });
+    const protectProxyCalls: Array<{ consoleId: string; opId: string }> = [];
+    type SandboxScope = { unifi?: { cloud: { protect: (id: string) => Record<string, Record<string, (args: unknown) => unknown>> } } };
+    const fn = new Function(
+      '__unifiCallLocal',
+      '__unifiRawLocal',
+      '__unifiCallCloud',
+      '__unifiRawCloud',
+      '__unifiCallLocalProtect',
+      '__unifiRawLocalProtect',
+      '__unifiCallCloudProtect',
+      '__unifiRawCloudProtect',
+      `${prelude}\nreturn unifi;`,
+    ) as (...args: unknown[]) => SandboxScope['unifi'];
+    const unifi = fn(
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      () => undefined,
+      (consoleId: string, opId: string) => {
+        protectProxyCalls.push({ consoleId, opId });
+        return { ok: true };
+      },
+      () => undefined,
+    );
+    const handle = unifi!.cloud.protect('console-A');
+    handle['cameras']!['listCameras']!({});
+    expect(protectProxyCalls).toEqual([{ consoleId: 'console-A', opId: 'listCameras' }]);
+  });
 });
 /* eslint-enable @typescript-eslint/no-implied-eval, @typescript-eslint/no-non-null-assertion */
 

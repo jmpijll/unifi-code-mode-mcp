@@ -30,15 +30,25 @@ export interface DispatchOperationArgs {
 
 export class UnknownOperationError extends Error {
   override readonly name = 'UnknownOperationError';
-  constructor(public readonly namespace: 'local' | 'cloud', public readonly operationId: string) {
+  constructor(
+    public readonly namespace: string,
+    public readonly operationId: string,
+  ) {
     super(`No operation "${operationId}" in unifi.${namespace} spec`);
   }
 }
 
+/**
+ * `namespace` is purely cosmetic — it shows up in the thrown
+ * `UnknownOperationError` so an LLM agent can see which surface the lookup
+ * failed against (e.g. `unifi.local`, `unifi.local.protect`,
+ * `unifi.cloud.network`, `unifi.cloud.protect`). It does not influence
+ * routing, which is driven entirely by `spec` and `operationId`.
+ */
 export async function dispatchOperation(
   client: HttpClient,
   spec: ProcessedSpec,
-  namespace: 'local' | 'cloud',
+  namespace: string,
   operationId: string,
   args: DispatchOperationArgs = {},
 ): Promise<UnifiResponse> {
@@ -303,8 +313,12 @@ function buildCloudNetworkProxyPrelude(localSpec: ProcessedSpec): string {
 
   return [
     '(function() {',
+    '  // The cloud-Network proxy is independent of the Site Manager native spec.',
+    '  // If unifi.cloud was stubbed as __missing (no cloudSpec), promote it to a',
+    '  // real namespace object so we can attach the proxy factory; the missing-',
+    '  // namespace error messaging only matters for unifi.cloud.<tag>.<op> calls.',
     '  if (typeof unifi.cloud !== "object" || unifi.cloud === null || unifi.cloud.__missing) {',
-    '    return; // cloud namespace not available; nothing to attach',
+    '    unifi.cloud = {};',
     '  }',
     '  var cache = {};',
     ...operationFactoryLines,
@@ -425,8 +439,10 @@ function buildCloudProtectProxyPrelude(protectSpec: ProcessedSpec): string {
 
   return [
     '(function() {',
+    '  // The cloud-Protect proxy is independent of the Site Manager native spec.',
+    '  // Promote unifi.cloud from __missing if needed so the factory attaches.',
     '  if (typeof unifi.cloud !== "object" || unifi.cloud === null || unifi.cloud.__missing) {',
-    '    return; // cloud namespace not available; nothing to attach',
+    '    unifi.cloud = {};',
     '  }',
     '  var cache = {};',
     ...operationFactoryLines,
