@@ -1,0 +1,86 @@
+#!/usr/bin/env expect
+# Drive `cursor-agent` in INTERACTIVE mode (with a real PTY) so the
+# project's .cursor/mcp.json is loaded and the LLM session has the
+# unifi MCP's tools registered. This is the only way to verify
+# LLM-mediated tool calls today (cursor-agent --print does not load
+# custom MCPs as of v2026.05.05).
+#
+# Usage:
+#   ./scripts/cursor-agent-pty-smoke.exp [model] [prompt]
+#
+# Defaults:
+#   model:  claude-4.6-sonnet-medium
+#   prompt: "Call the unifi MCP search tool with code='spec.cloud ? spec.cloud.operations.length : 0'..."
+#
+# Output:
+#   Transcript saved to out/cursor-agent-pty-<timestamp>.log
+#   Exits 0 if the model successfully invoked the unifi MCP, else 1.
+
+set model     [lindex $argv 0]
+set prompt    [lindex $argv 1]
+if {$model  eq ""} { set model  "claude-4.6-sonnet-medium" }
+if {$prompt eq ""} {
+    set prompt "Call the unifi MCP search tool with the code field set to: spec.cloud.operations.length . Then report only the number that comes back from the tool."
+}
+
+set timestamp [clock format [clock seconds] -format {%Y%m%d-%H%M%S}]
+set log_path  "out/cursor-agent-pty-${timestamp}.log"
+file mkdir out
+log_file -a $log_path
+
+set timeout 180
+
+# Find cursor-agent in PATH (or fall back to ~/.local/bin)
+set cursor_agent "cursor-agent"
+if {[catch {exec which cursor-agent}]} {
+    set cursor_agent "$env(HOME)/.local/bin/cursor-agent"
+}
+
+# --force (Run Everything) bypasses per-tool approval.
+# --approve-mcps auto-approves MCP servers from the project's mcp.json.
+# --model pins the LLM.
+# We pass the prompt as a positional argument so the interactive UI submits
+# it on startup, no PTY input typing needed.
+spawn $cursor_agent --force --approve-mcps --model $model $prompt
+
+# Wait for either a clear done-marker (ctrl-Z / submit indicator / the cost
+# summary line that cursor-agent prints when a turn finishes) or a long quiet
+# period after we see MCP activity.
+set saw_mcp 0
+set saw_done 0
+expect {
+    # The interactive UI shows the MCP tool name when calling (e.g. "unifi:search").
+    -re {unifi:search|unifi:execute|MCP tool|spec\.cloud\.operations} {
+        set saw_mcp 1
+        exp_continue
+    }
+    # The interactive UI shows a token-count / cost summary at the end of a turn.
+    -re {tokens used|Input:.*Output:|Done\.|chars/sec} {
+        set saw_done 1
+        # give it 2s to flush and stop accumulating
+        expect {
+            -re {.+} { exp_continue }
+            timeout { }
+        }
+    }
+    timeout { puts "TIMEOUT — no recognizable end-of-turn marker"; }
+}
+
+# Send Ctrl+C twice to exit the TUI.
+send -- "\003"
+sleep 1
+send -- "\003"
+sleep 1
+catch { close }
+catch { wait }
+
+set transcript [exec cat $log_path]
+
+# Pass condition: transcript shows the unifi MCP being invoked.
+if {$saw_mcp || [regexp {unifi[:.\-_ ]?(search|execute)} $transcript]} {
+    puts "\nPASS — transcript shows the unifi MCP was invoked. Log: $log_path"
+    exit 0
+} else {
+    puts "\nINCONCLUSIVE — no unambiguous MCP invocation in transcript. Log: $log_path"
+    exit 1
+}

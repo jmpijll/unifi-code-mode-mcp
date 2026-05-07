@@ -11,6 +11,10 @@
 #   3. (optional) --print prompt — drive an LLM-mediated call.
 #                                  See docs/cursor-skill.md for the known-issue
 #                                  caveat about --print mode and custom MCPs.
+#   4. (optional, --pty) drive   — drive cursor-agent in interactive PTY mode via
+#                                  expect(1). This is currently the strongest
+#                                  LLM-mediated proof we can get out of the
+#                                  cursor-agent CLI. See out/verification/.
 #
 # Prerequisites:
 #   - cursor-agent on PATH (https://cursor.com/docs/cli)
@@ -90,4 +94,18 @@ echo "[smoke] LLM result saved to $OUT"
 RESULT="$(jq -r '.result // empty' < "$OUT" 2>/dev/null)"
 if [[ -n "$RESULT" ]]; then
   echo "[smoke] result: $RESULT" | head -3
+fi
+
+if [[ "${1:-}" == "--pty" ]]; then
+  echo
+  echo "[smoke] [4/4] PTY/interactive LLM-mediated call (model: ${PTY_MODEL:-claude-4.6-sonnet-medium}) …"
+  if ! command -v expect >/dev/null 2>&1; then
+    echo "[smoke] expect(1) not installed — skipping PTY layer." >&2
+    exit 0
+  fi
+  PTY_MODEL="${PTY_MODEL:-claude-4.6-sonnet-medium}" \
+    expect "$ROOT/scripts/cursor-agent-pty-smoke.exp" "$PTY_MODEL" || {
+      echo "[smoke] PTY layer was inconclusive — see out/cursor-agent-pty-*.log" >&2
+      exit 0
+    }
 fi

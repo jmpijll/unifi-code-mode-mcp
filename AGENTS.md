@@ -242,7 +242,46 @@ wire protocol" questions; the unit tests are the right place for the
 For developer-local validation against the real `cursor-agent` CLI (not
 in CI), run `scripts/cursor-cli-smoke.sh`. It generates a temporary
 `.cursor/mcp.json`, drives three fixed prompts (HLD sweep, single-fact,
-intentionally-impossible), and saves transcripts to `out/`.
+intentionally-impossible), and saves transcripts to `out/`. Pass `--pty`
+to additionally drive `cursor-agent` in interactive mode through
+`expect(1)` — see §8.1.
+
+### 8.1 Verification scope (state your work honestly)
+
+Before claiming "this works with X", check the table in
+[`README.md` → Verification status](README.md#verification-status).
+We have directly verified:
+
+- 78/78 unit + integration tests (in-process MCP transport + real HTTP
+  transport) against a mock UniFi controller.
+- A real read-only sweep of the maintainer's home network through
+  `unifi.cloud.network()` end-to-end, with HLD/LLD/best-practices docs
+  generated from the result.
+- Protocol-level registration via `cursor-agent mcp list-tools unifi`.
+- One end-to-end LLM-mediated invocation: Claude Sonnet 4.6 driving
+  the server through `cursor-agent` in interactive PTY mode. Evidence
+  in `out/verification/cursor-agent-sonnet-mcp-call.txt`.
+
+Things we have **not** yet verified:
+
+- Cursor IDE chat panel (after a fresh window restart).
+- Other agent / IDE clients (Claude Desktop, Continue, Cline, Codeium,
+  Aider, Zed) and the official MCP Inspector UI.
+- A hosted multi-tenant deployment of the Streamable HTTP transport
+  behind a reverse proxy.
+- Long-running soak / stability under sustained load.
+
+If you add new client coverage, update the table in the README in the
+same PR. Do not silently widen the "verified" surface.
+
+A specific gotcha to keep in mind: against `cursor-agent v2026.05.05`,
+custom MCPs configured in `.cursor/mcp.json` are **not** auto-injected
+as model-callable tools, in either `--print` or interactive mode, even
+when `cursor-agent mcp list` shows the server as `ready`. Capable
+models work around this by reading `.cursor/mcp.json` themselves and
+spawning the server over stdio via shell commands. We treat this as a
+Cursor CLI limitation, not a server bug; see `docs/cursor-skill.md`
+§8 for the writeup.
 
 ---
 
