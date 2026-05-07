@@ -94,9 +94,25 @@ function extractType(schema: SchemaObject | undefined): string | undefined {
   return undefined;
 }
 
-/** Lower-camelCase the tag so `Sites` → `sites`, `WiFi Broadcasts` → `wifiBroadcasts`. */
+/**
+ * Lower-camelCase the tag so `Sites` → `sites`, `WiFi Broadcasts` → `wifiBroadcasts`.
+ *
+ * Also compacts verbose API-doc boilerplate before camelCasing. Examples:
+ *   - "Camera information & management"   → "camera"
+ *   - "Camera PTZ control & management"   → "cameraPtz"
+ *   - "Live view management"              → "liveView"
+ *   - "Alarm manager integration"         → "alarmManager"
+ *   - "Access Control (ACL Rules)"        → "aclRules"      (prefer parenthetical alias)
+ *   - "Information about application"     → "applicationInfo" (matches Network's "Application Info")
+ *   - "WiFi Broadcasts"                   → "wifiBroadcasts" (no change — no boilerplate)
+ *
+ * The compaction is conservative and only triggers on phrases that are
+ * known to be Ubiquiti API-doc boilerplate; novel multi-word tags pass
+ * through unchanged.
+ */
 export function normalizeTag(tag: string): string {
-  const cleaned = tag
+  const compact = compactTagPhrase(tag);
+  const cleaned = compact
     .trim()
     .replace(/[^a-zA-Z0-9 _-]/g, '')
     .replace(/[_-]+/g, ' ');
@@ -108,6 +124,44 @@ export function normalizeTag(tag: string): string {
     first.toLowerCase(),
     ...rest.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()),
   ].join('');
+}
+
+/**
+ * Strip the API-doc boilerplate that bloats UniFi (especially Protect)
+ * tag names. Pure phrase-level normalisation — no camelCasing here.
+ *
+ * Exposed for unit tests; not part of the public API.
+ */
+export function compactTagPhrase(tag: string): string {
+  let s = tag.trim();
+  if (s.length === 0) return s;
+
+  const paren = s.match(/^([^()]+?)\s*\(([^)]+)\)\s*$/);
+  if (paren?.[2]) {
+    s = paren[2].trim();
+  }
+
+  const aboutMatch = s.match(/^information\s+about\s+(.+)$/i);
+  if (aboutMatch?.[1]) {
+    s = `${aboutMatch[1]} info`;
+  }
+
+  const suffixes: RegExp[] = [
+    /\s+control\s*(?:&|and)\s*management$/i,
+    /\s+information\s*(?:&|and)\s*management$/i,
+    /\s+information$/i,
+    /\s+management$/i,
+    /\s+integration$/i,
+  ];
+  for (const re of suffixes) {
+    const stripped = s.replace(re, '').trim();
+    if (stripped.length > 0 && stripped !== s) {
+      s = stripped;
+      break;
+    }
+  }
+
+  return s;
 }
 
 /**

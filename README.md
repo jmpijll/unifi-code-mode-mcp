@@ -171,7 +171,7 @@ Two client-specific subtleties worth calling out:
 
 - **Network mutation verification.** Camera-rename round-trip on Protect is now live-verified; Network requires polymorphic-discriminator extraction in the spec loader (see "not yet verified" above) before the same pattern can be safely applied to ACL rules, DNS policies, networks, or Wi-Fi broadcasts
 - **End-to-end LLM-mediated invocation against the LAN-direct surfaces.** Cloud paths are live-verified through both `cursor-agent` and `opencode`; the same flow against `unifi.local.*` and `unifi.local.protect.*` has not been recorded yet
-- **Tag/operationId normalization for the official Protect spec** — Ubiquiti's CDN spec ships with `operationId: null` and verbose tag names like `"Camera PTZ control & management"`. The synthesizer produces friendly names like `cameraPtzPatrolStart`, but the tag namespace becomes `cameraPtzControlManagement`. Compact-tag heuristics are a follow-up
+- **Cross-spec polymorphic-discriminator extraction** — every Network 10.3.58 create endpoint returns `api.request.missing-type-id` because the loader doesn't currently expose the polymorphic discriminator enum to the synthesizer. Once that's wired, Network mutations can be live-verified the same way camera-rename was for Protect
 - **Broaden the bundled fallback** beyond the current ~18 JSON-over-HTTP ops, or expose binary surfaces (snapshots, RTSPS metadata, files) once the sandbox supports them
 - **Protect WebSocket events** (`/v1/subscribe/events`, `/v1/subscribe/devices`) — currently out of scope
 - **Per-tenant rate limiting** keyed on hashed credentials (currently per-IP)

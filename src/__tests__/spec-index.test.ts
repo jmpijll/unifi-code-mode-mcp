@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildOperationIndex,
+  compactTagPhrase,
   normalizeTag,
   synthesizeOperationId,
 } from '../spec/index-builder.js';
@@ -89,13 +90,70 @@ describe('buildOperationIndex', () => {
 describe('normalizeTag', () => {
   it('camelCases multi-word tags', () => {
     expect(normalizeTag('WiFi Broadcasts')).toBe('wifiBroadcasts');
-    expect(normalizeTag('Access Control (ACL Rules)')).toBe('accessControlAclRules');
     expect(normalizeTag('Sites')).toBe('sites');
   });
 
   it('returns "default" for empty input', () => {
     expect(normalizeTag('')).toBe('default');
     expect(normalizeTag('   ')).toBe('default');
+  });
+
+  it('compacts the verbose Protect boilerplate', () => {
+    // The 12 official Protect 7.0.107 tags become readable accessors.
+    expect(normalizeTag('Camera information & management')).toBe('camera');
+    expect(normalizeTag('Camera PTZ control & management')).toBe('cameraPtz');
+    expect(normalizeTag('Chime information & management')).toBe('chime');
+    expect(normalizeTag('Light information & management')).toBe('light');
+    expect(normalizeTag('NVR information & management')).toBe('nvr');
+    expect(normalizeTag('Sensor information & management')).toBe('sensor');
+    expect(normalizeTag('Viewer information & management')).toBe('viewer');
+    expect(normalizeTag('Live view management')).toBe('liveView');
+    expect(normalizeTag('Device asset file management')).toBe('deviceAssetFile');
+    expect(normalizeTag('Alarm manager integration')).toBe('alarmManager');
+    // "Information about application" maps to "applicationInfo" so it
+    // collides intentionally with Network's "Application Info" tag.
+    expect(normalizeTag('Information about application')).toBe('applicationInfo');
+    expect(normalizeTag('Application Info')).toBe('applicationInfo');
+    // "WebSocket updates" carries semantic info we don't strip.
+    expect(normalizeTag('WebSocket updates')).toBe('websocketUpdates');
+  });
+
+  it('prefers a parenthetical alias when one is supplied', () => {
+    expect(normalizeTag('Access Control (ACL Rules)')).toBe('aclRules');
+    expect(normalizeTag('Foo Bar (Baz)')).toBe('baz');
+  });
+
+  it('leaves Network tags alone (they have no boilerplate)', () => {
+    expect(normalizeTag('Sites')).toBe('sites');
+    expect(normalizeTag('Networks')).toBe('networks');
+    expect(normalizeTag('UniFi Devices')).toBe('unifiDevices');
+    expect(normalizeTag('Traffic Matching Lists')).toBe('trafficMatchingLists');
+    expect(normalizeTag('Hotspot')).toBe('hotspot');
+    expect(normalizeTag('DNS Policies')).toBe('dnsPolicies');
+  });
+});
+
+describe('compactTagPhrase', () => {
+  it('is a no-op for short, boilerplate-free phrases', () => {
+    expect(compactTagPhrase('Sites')).toBe('Sites');
+    expect(compactTagPhrase('WiFi Broadcasts')).toBe('WiFi Broadcasts');
+  });
+
+  it('strips suffixes case-insensitively', () => {
+    expect(compactTagPhrase('Camera Information & Management')).toBe('Camera');
+    expect(compactTagPhrase('Camera information and management')).toBe('Camera');
+  });
+
+  it('strips at most one suffix', () => {
+    // We don't want to over-trim. "Light information" alone should
+    // become "Light", not get further reduced.
+    expect(compactTagPhrase('Light information')).toBe('Light');
+    expect(compactTagPhrase('Light')).toBe('Light');
+  });
+
+  it('returns "<X> info" for "Information about X"', () => {
+    expect(compactTagPhrase('Information about application')).toBe('application info');
+    expect(compactTagPhrase('Information about the system')).toBe('the system info');
   });
 });
 
