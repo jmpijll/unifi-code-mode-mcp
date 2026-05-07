@@ -49,6 +49,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   using the documented `[unifi.<surface>.<error-class>]` error-shape
   contract. Sanitized transcript at
   `out/verification/opencode-deepseek-local-mcp-call.txt`.
+- **MCP Inspector (CLI mode)** against the same UDM-Pro. All four
+  phases pass: `tools/list` returns full descriptors for both
+  `search` and `execute`; credential-free `tools/call execute`
+  returns the surface inventory; credentialled `tools/call search`
+  returns live operations including the freshly compacted
+  `aclRules` tag accessor; credentialled `tools/call execute`
+  returns live site count `1`. Inspector pinned at v0.20.0 because
+  v0.21.2 has a missing-`commander` dep on Node v25 (upstream issue,
+  not ours). Sanitized transcript at
+  `out/verification/mcp-inspector-live-smoke.txt`.
 
 ### Changed
 
@@ -95,6 +105,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `await`, and the last-expression-as-return-value contract. This
   should reduce wrong-attempt counts on models that haven't been
   trained on QuickJS specifics.
+
+### Fixed
+
+- **Stale processed-spec caches were invisible to `normalizeTag`
+  changes.** `src/spec/cache/*.json` stores the OUTPUT of
+  `buildOperationIndex` (including pre-baked `primaryTag` strings),
+  so today's tag-name compaction was invisible to anyone with a
+  cached spec on disk. Fixed by adding a `cacheSchemaVersion` field
+  (`CACHE_SCHEMA_VERSION = 2` in `src/spec/loader.ts`); a mismatch
+  causes the loader to ignore the cache and refetch upstream. Bump
+  `CACHE_SCHEMA_VERSION` on any future change to
+  `buildOperationIndex` or `processSpec` shape. Discovered during
+  the MCP Inspector live verification — the Inspector returned
+  `accessControlAclRules` from the search index even after rebuilding
+  the binary, which exposed the stale-cache bug.
 
 ### Discovered
 
