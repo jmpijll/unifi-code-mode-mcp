@@ -48,7 +48,9 @@ The UniFi Network Integration API has **70+ endpoints**. Exposing each as a sepa
 
 ## For agents driving this server
 
-If you're an LLM agent (or a human configuring one) connecting to a running instance, read [`SKILL.md`](SKILL.md) for the operating manual — the `search → execute` loop, the three sandbox surfaces, the error taxonomy, and ready-to-paste recipes. For Cursor IDE / Cursor CLI specifically, see [`docs/cursor-skill.md`](docs/cursor-skill.md).
+If you're an LLM agent (or a human configuring one) connecting to a running instance, read [`SKILL.md`](SKILL.md) for the operating manual — the `search → execute` loop, the five sandbox surfaces, the error taxonomy, and ready-to-paste recipes. For Cursor IDE / Cursor CLI specifically, see [`docs/cursor-skill.md`](docs/cursor-skill.md); for opencode see [`docs/opencode-skill.md`](docs/opencode-skill.md).
+
+**For testers**, [`examples/unifi-expert-agent/`](examples/unifi-expert-agent/) ships a ready-made "UniFi network engineering expert" persona, a focused operating manual, [cross-platform install snippets](examples/unifi-expert-agent/install.md) (Cursor, opencode, Claude Code, Claude Desktop, VS Code + Copilot, Codex CLI, Continue, Cline, MCP Inspector, …), and [sample prompts](examples/unifi-expert-agent/SAMPLE_PROMPTS.md) you can run against the persona. We need verification reports — see the [project status](#project-status) callout above.
 
 ## Quickstart (single-user)
 
