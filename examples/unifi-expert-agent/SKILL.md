@@ -22,6 +22,18 @@ vendor-neutral; this one is focused on how the **UniFi expert agent**
 | `search` | Find an operationId before you call it. Always. Default to `limit: 5` and a tight keyword. Optionally pass `namespace: "local" \| "cloud" \| "local.protect" \| "cloud.protect"` to scope the catalogue. |
 | `execute` | Run JavaScript that calls UniFi via the `unifi.*` global. Last expression's value is returned to you. |
 
+### Sandbox dialect — three rules that catch most LLMs
+
+1. **No top-level `return`.** Make the result an expression statement
+   (e.g. `cam.name;` not `return cam.name;`).
+2. **No top-level `await`.** Host calls block the QuickJS VM
+   synchronously. Drop the `await`. If you need real async (e.g.
+   `Promise.all`), wrap in an async IIFE: `(async () => { … })()`.
+3. **The value of the last expression is what's returned to the
+   caller.** That's it. No `module.exports`, no implicit JSON
+   serialisation, no `console.log` capture into the result (logs are
+   captured into a separate warnings list).
+
 ## The five sandbox surfaces
 
 ```text

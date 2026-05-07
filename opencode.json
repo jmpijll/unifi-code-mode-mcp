@@ -4,7 +4,13 @@
     "unifi": {
       "type": "local",
       "command": ["node", "dist/index.js"],
-      "enabled": true
+      "enabled": true,
+      "environment": {
+        "UNIFI_LOCAL_BASE_URL": "{env:UNIFI_LOCAL_BASE_URL}",
+        "UNIFI_LOCAL_API_KEY": "{env:UNIFI_LOCAL_API_KEY}",
+        "UNIFI_LOCAL_INSECURE": "{env:UNIFI_LOCAL_INSECURE}",
+        "UNIFI_CLOUD_API_KEY": "{env:UNIFI_CLOUD_API_KEY}"
+      }
     }
   },
   "permission": {
