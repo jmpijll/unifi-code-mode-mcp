@@ -7,7 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(no changes yet)
+### Added
+
+- `scripts/discover-local.ts` — read-only discovery script for the
+  LAN-direct surfaces (mirrors `scripts/discover-network.ts` and
+  `scripts/discover-protect.ts` but routes through `unifi.local.*` and
+  `unifi.local.protect.*`). Reads the local API key from 1Password
+  (`OP_LOCAL_REF`, default `op://AI Agents/Unifi local api key/password`)
+  with env-var override.
+
+### Verified live
+
+- **LAN-direct Network** (`unifi.local.*`) against a real UDM-Pro
+  running Network 10.3.58. 67-op spec resolved; 1 site / 5 devices
+  (UDM-Pro + 4 access points) / 2 WAN / 2 Wi-Fi / 32 wireless clients
+  enumerated through 10 sandbox host calls in 608 ms. Sanitized
+  transcript at `out/verification/local-network-live-smoke.txt`.
+- **LAN-direct Protect** (`unifi.local.protect.*`) against the same
+  UDM-Pro running Protect 7.0.107. 35-op official spec resolved;
+  4 cameras returned in 162 ms — identical result to the cloud-Protect
+  run on the same hardware (cross-confirms the wire path). Sanitized
+  transcript at `out/verification/local-protect-live-smoke.txt`.
+
+### Documentation
+
+- README "Project status" callout updated: 4-of-5 surfaces are now
+  live-verified.
+- README verification matrix gains two new rows for the LAN-direct
+  sweeps; the "not yet verified" list and roadmap drop the local-
+  Protect entries that are now satisfied and gain new entries for
+  LLM-mediated LAN-direct invocation and mutation paths.
+- Root `SKILL.md`, root `AGENTS.md`, and
+  `examples/unifi-expert-agent/AGENTS.md` updated to reflect
+  `unifi.local.*` and `unifi.local.protect.*` as live-verified.
+- `examples/unifi-expert-agent/install.md` adds a surface-verification
+  callout under the verification legend.
 
 ## [0.2.0-beta.1] — 2026-05-07
 

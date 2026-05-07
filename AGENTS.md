@@ -68,8 +68,9 @@ backed by a sandboxed JS surface that fans out to two separate UniFi APIs.
      pattern is officially documented by Ubiquiti
      (`developer.ui.com/protect/v7.0.107/...` exposes a "Remote" / "Local"
      base-URL selector mapping every operation to exactly these paths).
-     Mock-verified end-to-end; live verification against a Protect-enabled
-     console pending.
+     Mock-verified end-to-end and live-verified against a real
+     UDM-Pro running Protect 7.0.107 (read-only sweep, 2026-05-07 —
+     `out/verification/cloud-protect-live-smoke.txt`).
 3. **Credentials never enter the sandbox.** They live on the host and are
    looked up from `TenantContext` when the host-side `request()` runs. The
    sandbox sees an opaque `client` handle, never an `apiKey`.
@@ -298,6 +299,18 @@ We have directly verified:
   `getProtectMetaInfo` and `listCameras` returned a real
   `applicationVersion` and 4 real cameras. Sanitized transcript at
   `out/verification/cloud-protect-live-smoke.txt`.
+- **A real read-only sweep of LAN-direct Network** through `unifi.local.*`
+  against the same UDM-Pro running Network 10.3.58 (2026-05-07). 67-op
+  spec resolved; 1 site / 5 devices (UDM-Pro + 4 access points) / 2 WAN
+  / 2 Wi-Fi / 32 wireless clients enumerated through 10 sandbox host
+  calls in 608 ms. Sanitized transcript at
+  `out/verification/local-network-live-smoke.txt`.
+- **A real read-only sweep of LAN-direct Protect** through
+  `unifi.local.protect.*` against the same UDM-Pro running Protect
+  7.0.107 (2026-05-07). 35-op spec resolved; 4 cameras returned in
+  162 ms — identical result to the cloud-Protect run on the same
+  hardware (cross-confirms the wire path). Sanitized transcript at
+  `out/verification/local-protect-live-smoke.txt`.
 - Protocol-level registration via `cursor-agent mcp list-tools unifi`.
 - Two end-to-end LLM-mediated invocations against two different
   clients with two different models:
@@ -316,12 +329,19 @@ Things we have **not** yet verified:
 - Long-running soak / stability under sustained load.
 - More than one model on each verified client (we drove only one model
   per client end-to-end).
-- **Direct local Protect path** (`unifi.local.protect.*`) against a
-  Protect-enabled console on the LAN. Same `HttpClient` shape as the
-  cloud-proxied variant we just verified, but no LAN-side smoke.
-- **Mutation operations on Protect** — PTZ commands, disable-mic, the
-  alarm-manager webhook trigger. Wired and indexed but the live read-
-  only sweep didn't exercise them.
+- **End-to-end LLM-mediated invocation against the LAN-direct surfaces**
+  (`unifi.local.*` and `unifi.local.protect.*`). The 2026-05-07 LAN
+  sweep was driven by `scripts/discover-local.ts` directly through
+  `ExecuteExecutor`; an LLM client driving the same code via the
+  `execute` MCP tool against the LAN-direct path has not yet been
+  recorded. (LLM-mediated invocation against the cloud paths IS
+  verified — see the `cursor-agent` and `opencode` transcripts above.)
+- **Mutation operations on every surface.** All 2026-05-07 live sweeps
+  were read-only (overview/list endpoints only on Network; `meta/info`
+  and `cameras` on Protect). PATCH/POST/DELETE on Network resources,
+  PTZ commands, `disableCameraMicPermanently`, and the alarm-manager
+  webhook trigger are wired and indexed but unproven against real
+  hardware.
 - **Binary / streaming Protect surfaces** (snapshot bytes, RTSPS
   metadata, talk-back, `subscribe/*` WebSockets) — present in the
   spec, but the JSON-only `HttpClient` doesn't speak them yet.
@@ -359,13 +379,14 @@ Two client-specific gotchas you'll save time knowing about:
 
 ## 10. Roadmap (intentional, not yet implemented)
 
-- **Live Protect verification** — drive `unifi.local.protect.*` and
-  `unifi.cloud.protect(consoleId).*` against a real Protect-enabled
-  UniFi OS console. Until then, the Protect surfaces are wired but
-  unproven against live hardware (see §2 and §8.1). Schema to be
-  broadened once Ubiquiti publishes a Protect Integration spec; the
-  current bundled fragment is hand-written from publicly observable
-  behaviour.
+- **Live verification of mutation paths.** All 2026-05-07 live sweeps
+  were read-only. Lowest-risk first: toggle a Wi-Fi network on/off
+  (Network), `POST /v1/cameras/{id}/ptz/goto/{slot}` to a known preset
+  (Protect), then progressively riskier ones.
+- **End-to-end LLM-mediated invocation against the LAN-direct
+  surfaces.** Cloud paths are live-verified through both `cursor-agent`
+  and `opencode`; the same flow against `unifi.local.*` and
+  `unifi.local.protect.*` has not been recorded yet.
 - **Protect WebSocket events** (`/v1/subscribe/events`,
   `/v1/subscribe/devices`, `/v1/cameras/{id}/talkback-session`,
   `/v1/cameras/{id}/rtsps-stream`) — the current sandbox/HTTP-client

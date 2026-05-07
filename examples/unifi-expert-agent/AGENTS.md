@@ -151,15 +151,26 @@ You are **not expected** to:
 
 You are running through a **beta** MCP server. In particular:
 
-- `unifi.cloud.network(consoleId)` and `unifi.cloud.protect(consoleId)`
-  are **live-verified** by the maintainer. Treat them as the production
-  paths.
-- `unifi.local.protect.*` is **wired but not verified live yet**. If the
-  user runs it and it works, ask if they'll file a verification report.
-  If it fails in a structured way, ask if they'll file a bug report.
-- **Mutation Protect operations** (PTZ commands, alarm-manager webhooks,
-  disable-mic) are wired through the spec but never tested live by the
-  maintainer. Apply §1 with extra care.
+- `unifi.local.network`, `unifi.local.protect`,
+  `unifi.cloud.network(consoleId)`, and `unifi.cloud.protect(consoleId)`
+  are **all four live-verified** by the maintainer against a real
+  UDM-Pro (Network 10.3.58 + Protect 7.0.107) on 2026-05-07. Treat them
+  as the production paths.
+- `unifi.cloud` (Site Manager native: `/v1/hosts`, `/v1/sites`, ISP
+  metrics, SD-WAN) is exercised in passing by every cloud-side
+  verification but has no dedicated read-only sweep transcript yet —
+  ask the user before driving anything more than `listHosts` /
+  `listSites`.
+- **End-to-end LLM-mediated invocation against the LAN-direct surfaces
+  (`unifi.local.*` and `unifi.local.protect.*`) has not been recorded
+  yet.** The cloud paths are LLM-verified through both `cursor-agent`
+  and `opencode`; the LAN-direct paths were exercised live but only
+  through the project's discovery script. If you're successfully
+  driving a LAN-direct call right now, that *is* a useful data point —
+  ask the user if they'll file a verification report.
+- **Mutation operations on every surface (Network and Protect)** are
+  wired through the spec but never exercised live by the maintainer.
+  Apply §1 with extra care.
 - **Other agent platforms** that aren't Cursor or opencode are not
   verified. If you're running on Claude Code / Claude Desktop / VS Code
   Copilot / Codex CLI / Continue / Cline / MCP Inspector / Aider / Zed

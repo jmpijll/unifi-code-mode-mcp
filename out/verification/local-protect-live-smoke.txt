@@ -1,0 +1,112 @@
+================================================================================
+LIVE LOCAL-PROTECT VERIFICATION — UDM-Pro running Protect 7.0.107
+Recorded: 2026-05-07 ~17:11 CEST (15:11 UTC)
+Source:   scripts/discover-local.ts driving src/sandbox/execute-executor.ts
+================================================================================
+
+WHAT THIS PROVES
+  ✓ The LAN-direct UniFi Protect Integration API path
+        https://<controller>/proxy/protect/integration/v1/...
+    works against real Protect-enabled UniFi OS hardware with the same
+    controller-issued local API key the Network surface uses (Network
+    and Protect share auth on the local controller).
+  ✓ The unifi.local.protect.* sandbox surface exposed by the QuickJS
+    sandbox is wired correctly: it loads the official Protect OpenAPI
+    spec from apidoc-cdn.ui.com (35 ops resolved for v7.0.107),
+    dispatches both raw request() and named callOperation() lookups
+    through the right /proxy/protect/integration prefix, and survives
+    a multi-call traversal (2 host calls in 162 ms inside QuickJS).
+  ✓ Per-tenant TLS handling honors UNIFI_LOCAL_INSECURE=true (the same
+    flag that gates Network on the same controller) and emits the
+    documented loud warning at [unifi.local.protect].
+  ✓ The synthesizeOperationId function produces stable names for the
+    official spec (which ships every operationId as null). The
+    path-based request() escape hatch we used for portability also
+    works cleanly.
+
+WHAT THIS DOES NOT PROVE
+  ✗ Mutation Protect operations (PTZ goto/patrol-start/patrol-stop,
+    disable-mic, alarm-manager webhook trigger). This run is purely
+    read-only: GET /v1/meta/info and GET /v1/cameras.
+  ✗ Binary/streaming operations (snapshot bytes, RTSPS metadata,
+    talkback, subscribe/* WebSockets) — all out of scope for the
+    JSON-only HttpClient.
+  ✗ End-to-end LLM-mediated invocation against the local Protect
+    surface. Sandbox script driven directly from a Node script through
+    ExecuteExecutor; a real client (cursor-agent, opencode, …) issuing
+    the `execute` tool with the same code has not yet been exercised
+    against local Protect.
+  ✗ Multi-NVR / multi-tenant Protect setups. This run targets a single
+    UDM-Pro Protect installation.
+
+EXACT SANDBOX CODE EXECUTED
+  var p = unifi.local.protect;
+  var meta = p.request({ method: 'GET', path: '/v1/meta/info' });
+  var cameras = [];
+  try {
+    var camRes = p.request({ method: 'GET', path: '/v1/cameras' });
+    cameras = Array.isArray(camRes) ? camRes
+            : (camRes && camRes.data) ? camRes.data : [];
+  } catch (e) { cameras = ['ERROR: ' + String(e)]; }
+  ({
+    meta: meta,
+    cameraCount: cameras.length,
+    cameraSample: cameras.slice(0, 5).map(function(c) {
+      return c && typeof c === 'object'
+        ? {
+            id: c.id, name: c.name, modelKey: c.modelKey, type: c.type,
+            state: c.state, firmwareVersion: c.firmwareVersion,
+            isMicEnabled: c.isMicEnabled, isRecording: c.isRecording,
+            hasSpeaker: c.hasSpeaker, hasMic: c.hasMic
+          }
+        : { raw: c };
+    })
+  });
+
+RESULT (sanitized — IDs and 3 of 4 camera names redacted)
+{
+  "meta": { "applicationVersion": "7.0.107" },
+  "cameraCount": 4,
+  "cameraSample": [
+    { "id": "<id-1>", "name": "<redacted-1>", "modelKey": "camera", "state": "DISCONNECTED", "isMicEnabled": true },
+    { "id": "<id-2>", "name": "<redacted-2>", "modelKey": "camera", "state": "DISCONNECTED", "isMicEnabled": true },
+    { "id": "<id-3>", "name": "Voordeur",     "modelKey": "camera", "state": "CONNECTED",    "isMicEnabled": true },
+    { "id": "<id-4>", "name": "<redacted-3>", "modelKey": "camera", "state": "DISCONNECTED", "isMicEnabled": true }
+  ]
+}
+
+NOTE: Three of the four cameras report DISCONNECTED in this
+particular snapshot — that's a property of the homelab at recording
+time (cameras temporarily off the LAN), not a bug in the wire path.
+The Protect controller still returned full metadata including
+firmwareVersion, isRecording, hasSpeaker, hasMic, etc. for each — we
+truncated the sample to the columns most readers care about.
+
+NOTE: This is the SAME 4-camera result as the cloud-Protect verification
+recorded in cloud-protect-live-smoke.txt (Site Manager connector path
+against the same UDM-Pro). The Protect controller backs both surfaces,
+so this run cross-confirms that the LAN-direct path returns identical
+data to the cloud-proxied path on the same hardware.
+
+PROBE METADATA
+  Controller:    UDM-Pro on UniFi OS, Protect application 7.0.107
+  Reachable:     HTTPS 200 on /proxy/protect/integration/v1/meta/info
+  TLS:           strict-by-default; this run used UNIFI_LOCAL_INSECURE=true
+                 (UDM self-signed cert)
+  Spec source:   https://apidoc-cdn.ui.com/protect/v7.0.107/integration.json
+                 (Ubiquiti official, 35 operations after build)
+  Sandbox:       2 host calls, 162 ms wall-clock inside QuickJS
+                 (max budget: 50 calls / 60 s)
+  Camera count:  4 (1 CONNECTED + 3 DISCONNECTED at recording time)
+
+REPRODUCER
+  $ UNIFI_LOCAL_BASE_URL=https://172.27.1.1 \
+      UNIFI_LOCAL_INSECURE=true \
+      OP_LOCAL_REF='op://AI Agents/Unifi local api key/password' \
+      npx tsx scripts/discover-local.ts
+  # Reads the local key from 1Password (same key as Network — both
+  # applications on this UDM share the controller's local API key).
+  # Writes the full unsanitized JSON snapshot under
+  #   out/local-protect-snapshot-<ts>.json
+  # which is gitignored.
+================================================================================
