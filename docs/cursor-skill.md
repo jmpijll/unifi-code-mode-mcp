@@ -264,31 +264,52 @@ If the smoke fails, check in this order:
   workspace-relative path like `"args": ["dist/index.js"]` instead — it
   works for both the IDE and the CLI subcommands. Verified against
   cursor-agent v2026.05.05.
-- **`cursor-agent --print` mode + custom MCPs.** With the default
-  `composer-2-fast` model, custom MCP servers configured in
-  `.cursor/mcp.json` are *not* registered as model-callable tools in
-  the headless `--print` session, even when
-  `cursor-agent mcp list` shows the server as `ready` and
-  `--approve-mcps --force --trust` are all set. The model knows the
-  server exists (it can see `dist/index.js` in the workspace) but its
-  tool list contains only `codebase_search`, `run_terminal_cmd`,
-  `grep`, `read_file`, etc. — no `mcp__<server>__<tool>` entry. The
-  model often works around this by spawning the MCP server over stdio
-  and driving JSON-RPC manually via `run_terminal_cmd`, which produces
-  correct results but is unreliable and consumes call budget. Verified
-  against cursor-agent v2026.05.05.
+- **`cursor-agent` does not auto-inject custom MCPs as model tools.**
+  This is the most important caveat in this document. Across both
+  `--print` (headless) and interactive (TUI) sessions, against
+  `composer-2-fast`, `gpt-5.3-codex`, and `claude-4.6-sonnet-medium`,
+  with `cursor-agent mcp list` reporting the server as `ready` and
+  `--approve-mcps --force` set, custom MCP servers configured in
+  `.cursor/mcp.json` are **not** added to the model's tool list. The
+  model has access only to Cursor's built-ins (`codebase_search`,
+  `run_terminal_cmd`, `grep`, `read_file`, plus a `listMcpResources`
+  tool that returns `[]` for project-scoped servers). There is no
+  `mcp__<server>__<tool>` entry exposed to the model.
 
-  **Reliable smoke**: use `cursor-agent mcp list-tools <name>` to
-  confirm protocol-level wiring (no LLM session needed). For
-  functional behaviour use the project's Vitest integration suite —
-  it speaks the same MCP wire protocol via `InMemoryTransport` /
-  `StreamableHTTPClientTransport`.
+  Sufficiently capable models (Sonnet 4.6, Codex 5.3) work around
+  this on their own: they read `.cursor/mcp.json` from the workspace,
+  find the server's command, and drive it over stdio by writing a
+  raw JSON-RPC message into `node dist/index.js` via
+  `run_terminal_cmd`. The result is correct (we verified Sonnet 4.6
+  invoking `search` and getting back the right value end-to-end —
+  see `out/verification/cursor-agent-sonnet-mcp-call.txt`), but the
+  workaround is slow, costs extra tokens, and depends on the model's
+  willingness to read the workspace config.
 
-  **Permissions tip** (for interactive `cursor-agent` sessions, where
-  custom MCPs *do* register): if the global
-  `~/.cursor/cli-config.json` uses `"approvalMode": "allowlist"`,
-  add a project-scoped `.cursor/cli.json` to pre-allow this server's
-  tools without prompting:
+  Verified against cursor-agent v2026.05.05.
+
+  **Reliable smokes**:
+
+  1. **Protocol-level (no LLM, no auth):**
+     `cursor-agent mcp list-tools unifi` should print both `search`
+     and `execute`. This proves the registration is correct.
+  2. **Functional (no LLM):** the Vitest integration suite —
+     `npm test -- src/__tests__/integration` — speaks the same MCP
+     wire protocol as Cursor would, via `InMemoryTransport` and
+     `StreamableHTTPClientTransport`.
+  3. **End-to-end LLM-mediated (PTY):**
+     `./scripts/cursor-cli-smoke.sh --pty` drives `cursor-agent` in
+     interactive mode through `expect(1)` and captures whether a
+     real LLM successfully invokes the server. This is the strongest
+     proof currently obtainable from `cursor-agent` itself; it
+     succeeds only because the model finds and spawns the server
+     manually, as described above.
+
+  **Permissions tip** (for interactive `cursor-agent` sessions): if
+  the global `~/.cursor/cli-config.json` uses
+  `"approvalMode": "allowlist"`, add a project-scoped
+  `.cursor/cli.json` to pre-allow this server's tools without
+  prompting (this file is checked into the repo for reference):
 
   ```json
   {
@@ -300,8 +321,6 @@ If the smoke fails, check in this order:
     }
   }
   ```
-
-  This file is checked into the repo for reference.
 
 ## 9. Reference
 

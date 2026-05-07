@@ -24,5 +24,8 @@ src/spec/cache/
 !.cursor/mcp.json
 !.cursor/cli.json
 
-out/
+# out/ holds live network snapshots and generated docs that may contain MAC
+# and IP material — only the curated verification/ subfolder is committed.
+out/*
+!out/verification/
 

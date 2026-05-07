@@ -90,11 +90,36 @@ sites.data.length;
 
 Pre-1.0. The Network Integration API spec is loaded dynamically from Ubiquiti's CDN; the server should adapt to controller version changes without code edits.
 
+### Verification status
+
+What we have **directly verified** so far:
+
+| Layer | How | Result |
+|---|---|---|
+| Unit tests | Vitest, 78 specs across spec loader, dispatcher, sandbox, server | ✅ all green |
+| Integration tests (in-process MCP transport) | `InMemoryTransport` against `createMcpServer` + a mock UniFi controller | ✅ green |
+| Integration tests (real Streamable HTTP transport) | `StreamableHTTPClientTransport` over a real HTTP listener | ✅ green |
+| Live read-only sweep on a real network | `scripts/discover-network.ts` against a real UDM-Pro-Max via `unifi.cloud.network()` | ✅ produced 28 KB JSON snapshot, plus HLD/LLD/best-practices Markdown |
+| `cursor-agent mcp list-tools unifi` (protocol smoke) | local CLI, no LLM | ✅ both `search` and `execute` exposed |
+| End-to-end LLM-mediated invocation via cursor-agent | Claude Sonnet 4.6 driving the server through `cursor-agent` in interactive PTY mode | ✅ JSON-RPC roundtrip, correct value returned (see `out/verification/cursor-agent-sonnet-mcp-call.txt`) |
+
+What is **not yet verified** (and where help is welcome):
+
+- Cursor IDE chat panel after a fresh window restart (project-scoped `.cursor/mcp.json` registration).
+- Other agent / IDE clients: Claude Desktop, Continue, Codeium, Aider, Zed, Cline, etc.
+- The official MCP Inspector UI.
+- Hosted/multi-tenant deployment of the Streamable HTTP transport behind a reverse proxy.
+- Long-running soak / stability under sustained load.
+- Real UniFi networks other than the one author's homelab — we cannot generalise resilience claims from a single network.
+
+A subtlety worth calling out for `cursor-agent` users: against `cursor-agent v2026.05.05`, custom MCP servers configured in `.cursor/mcp.json` are *not* injected as model-callable tools in either `--print` or interactive mode, even when `cursor-agent mcp list` reports them as `ready`. Sufficiently capable models (Sonnet 4.6, Codex 5.3) work around this by reading `.cursor/mcp.json` themselves and driving the server over stdio; the result is correct but indirect. See `docs/cursor-skill.md` §8 for the full writeup and reproducer.
+
 ### Roadmap
 
 - **UniFi Protect proxy** — `unifi.cloud.protect(consoleId).*` over the same `/v1/connector/consoles/{id}/proxy/protect/integration` connector
 - **Per-tenant rate limiting** keyed on hashed credentials (currently per-IP)
 - **Optional persistent spec cache** versioned by controller fingerprint
+- **Broader client validation** — confirmed working configs for Claude Desktop, Continue, Cline, Aider, Zed, and the MCP Inspector
 
 ## Documentation
 

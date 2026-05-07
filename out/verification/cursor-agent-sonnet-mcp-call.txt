@@ -1,0 +1,47 @@
+================================================================================
+END-TO-END LLM-MEDIATED MCP VERIFICATION — Sonnet 4.6 via cursor-agent
+Recorded: 2026-05-07 09:39 CEST
+Source: out/cursor-agent-pty-20260507-093928.log (raw PTY transcript with TUI noise)
+================================================================================
+
+COMMAND:
+  cursor-agent --force --approve-mcps --model claude-4.6-sonnet-medium \
+    "Call the unifi MCP search tool with the code field set to:
+     spec.cloud.operations.length . Then report only the number that comes
+     back from the tool."
+
+WHAT THE LLM DID (extracted from the TUI redraw, with line numbers from the
+raw frame-buffered transcript):
+
+  10019  Globbed, read 1 glob, 1 file
+  10020  Globbed "**/.cursor/mcp.json" in .
+  10021  Read .cursor/mcp.json
+
+  13044  $ cd /path/to/unifi-code-mode-mcp && echo
+  13045    '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":
+  13046    "search","arguments":{"code":"spec.cloud.operations.length"}}}' |
+  13047    node dist/index.js 2>/dev/null   2.1s
+  13048    {"result":{"content":[{"type":"text","text":"9"},{"type":"text",
+  13049    "text":"--- Executed in 12ms ---"}],"isError":false},
+            "jsonrpc":"2.0","id":1}
+
+  Final answer rendered to user: 9
+
+WHAT THIS PROVES:
+  ? The MCP server's wire protocol works end-to-end with a real LLM driving it.
+  ? The `search` tool, called with the documented `code` argument, returns the
+    correct evaluated value from the QuickJS sandbox.
+  ? A frontier-tier model (Claude Sonnet 4.6) can reason about the server's
+    role and successfully use it without any hand-holding.
+
+WHAT THIS DOES NOT PROVE (and why we keep saying so in the docs):
+  ? cursor-agent v2026.05.05 did NOT auto-register the unifi MCP's tools as
+    model-callable functions, even with `unifi: ready` in `cursor-agent mcp
+    list` AND `--approve-mcps` set. Sonnet had to discover the server itself
+    by reading `.cursor/mcp.json` and speak JSON-RPC to it via a shell
+    subprocess.
+  ? We have not yet verified registration in: Cursor IDE chat panel (after a
+    fresh IDE start), Claude Desktop, Continue, Codeium, Aider, MCP Inspector,
+    or any custom client. See README §"Verification status" for the full list.
+
+================================================================================

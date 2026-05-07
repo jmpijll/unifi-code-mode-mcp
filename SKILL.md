@@ -257,6 +257,15 @@ unifi.local.callOperation('updateWifiBroadcast', {
 - **Snapshots in this repo's `out/` folder contain MAC and IP material**
   and are gitignored. Do not paste them into chats unless the user is
   the network owner.
+- **Pre-1.0 client coverage is narrow.** The MCP wire protocol has been
+  verified end-to-end with Claude Sonnet 4.6 driving the server through
+  `cursor-agent` in interactive mode (see
+  [README → Verification status](README.md#verification-status)). It
+  has *not* yet been validated against Cursor IDE chat panel, Claude
+  Desktop, Continue, Cline, Codeium, Aider, Zed, or the MCP Inspector
+  UI. If you find a client where the server misbehaves, open an issue
+  with the protocol log; the server itself is wire-correct, so most
+  surprises will be in client wiring or env-var passing.
 
 ## 11. Where to look for more
 
