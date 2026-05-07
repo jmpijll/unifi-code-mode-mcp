@@ -1,0 +1,168 @@
+================================================================================
+LIVE LOCAL-NETWORK VERIFICATION — UDM-Pro running Network 10.3.58
+Recorded: 2026-05-07 ~17:11 CEST (15:11 UTC)
+Source:   scripts/discover-local.ts driving src/sandbox/execute-executor.ts
+================================================================================
+
+WHAT THIS PROVES
+  ✓ The LAN-direct Network Integration API path
+        https://<controller>/proxy/network/integration/v1/...
+    works against real UniFi OS hardware with a controller-issued local
+    API key.
+  ✓ The unifi.local.* sandbox surface (alias of unifi.local.network.*)
+    exposed by the QuickJS sandbox is wired correctly: it loads the
+    controller's matching OpenAPI spec from apidoc-cdn.ui.com (67 ops
+    resolved for Network 10.1.84 — the closest published spec to the
+    controller's 10.3.58), dispatches both raw request() and named
+    callOperation() lookups through the right /proxy/network/integration
+    prefix, and survives a multi-call traversal (10 host calls in
+    608 ms inside QuickJS).
+  ✓ Per-tenant TLS handling honors UNIFI_LOCAL_INSECURE=true on the
+    self-signed UDM cert and emits the documented loud warning at
+    [unifi.local].
+  ✓ Both expected and unexpected per-operation errors propagate cleanly
+    back into the sandbox as catchable JS Errors with the documented
+    [unifi.local.http] HTTP <status> on <path>: <api-message> shape
+    (verified via the firewallZones / firewallPolicies branches —
+    Zone-Based Firewall is not enabled on this controller, so each
+    raised HTTP 400 with code api.firewall.zone-based-firewall-not-
+    configured; the sandbox script captured them into per-section
+    *_error fields and continued the traversal cleanly rather than
+    aborting).
+
+WHAT THIS DOES NOT PROVE
+  ✗ Mutation operations (create/update/delete) on the local Network
+    surface — this run is purely read-only (overview/list endpoints
+    only, no PATCH/POST/DELETE).
+  ✗ End-to-end LLM-mediated invocation against the local surface. The
+    sandbox script was driven directly from a Node script through
+    ExecuteExecutor; a real client (cursor-agent, opencode, …) issuing
+    the `execute` tool with the same code has been verified for the
+    cloud paths but not yet for direct-local.
+  ✗ Multi-site traversal — this controller has only the Default site,
+    so per-site isolation in the sandbox loop is exercised but
+    cross-site collisions are not.
+  ✗ Behaviour under controller-side load — single low-traffic burst.
+
+EXACT SANDBOX CODE EXECUTED
+  var net = unifi.local;
+  var snapshot = {
+    generatedAt: new Date().toISOString(),
+    info: net.request({ method: 'GET', path: '/v1/info' })
+  };
+  var sitesPage = net.callOperation('getSiteOverviewPage', { pageSize: 100 });
+  snapshot.sites = [];
+
+  var siteList = (sitesPage && sitesPage.data) || [];
+  for (var i = 0; i < siteList.length; i++) {
+    var s = siteList[i];
+    var site = { id: s.id, name: s.name, internalReference: s.internalReference, raw: s };
+    try { site.networks = net.callOperation('getNetworksOverviewPage',  { siteId: s.id, pageSize: 100 }).data; } catch (e) { site.networks_error  = String(e); }
+    try { site.wans     = net.callOperation('getWansOverviewPage',      { siteId: s.id, pageSize: 100 }).data; } catch (e) { site.wans_error      = String(e); }
+    try { site.wifi     = net.callOperation('getWifiBroadcastPage',     { siteId: s.id, pageSize: 100 }).data; } catch (e) { site.wifi_error      = String(e); }
+    try { site.firewallZones    = net.callOperation('getFirewallZones',    { siteId: s.id }); } catch (e) { site.firewallZones_error    = String(e); }
+    try { site.firewallPolicies = net.callOperation('getFirewallPolicies', { siteId: s.id }); } catch (e) { site.firewallPolicies_error = String(e); }
+    try { site.aclRules         = net.callOperation('getAclRulePage',      { siteId: s.id, pageSize: 200 }).data; } catch (e) { site.aclRules_error = String(e); }
+    site.devices = [];
+    try {
+      var devPage = net.callOperation('getAdoptedDeviceOverviewPage', { siteId: s.id, pageSize: 200 });
+      var devs = (devPage && devPage.data) || [];
+      for (var j = 0; j < devs.length; j++) site.devices.push({ summary: devs[j] });
+    } catch (e) { site.devices_error = String(e); }
+    try {
+      var clientsPage = net.callOperation('getConnectedClientOverviewPage', { siteId: s.id, pageSize: 200 });
+      site.clientsTotal  = clientsPage && clientsPage.totalCount;
+      site.clientsSample = ((clientsPage && clientsPage.data) || []).slice(0, 5);
+    } catch (e) { site.clients_error = String(e); }
+    snapshot.sites.push(site);
+  }
+  snapshot;
+
+RESULT (sanitized — UUIDs, MACs, IPs, and proper names redacted)
+{
+  "info":  { "applicationVersion": "10.3.58" },
+  "sites": [
+    {
+      "id":   "<site-uuid>",
+      "name": "Default",
+      "internalReference": "default",
+      "networks": [
+        {
+          "management": "GATEWAY",
+          "id":         "<network-uuid>",
+          "name":       "Default",
+          "enabled":    true,
+          "vlanId":     1,
+          "metadata":   { "origin": "SYSTEM_DEFINED", "configurable": true },
+          "default":    true
+        }
+      ],
+      "wans": [
+        { "id": "<wan-1-uuid>", "name": "Internet 1" },
+        { "id": "<wan-2-uuid>", "name": "Internet 2" }
+      ],
+      "wifi": [
+        {
+          "type":     "STANDARD",
+          "id":       "<wifi-1-uuid>",
+          "name":     "<wifi-1-ssid>",
+          "enabled":  true,
+          "metadata": { "origin": "USER_DEFINED" },
+          "network":  { "type": "NATIVE" },
+          "securityConfiguration":      { "type": "WPA2_PERSONAL" },
+          "broadcastingFrequenciesGHz": [2.4, 5]
+        },
+        {
+          "type":     "IOT_OPTIMIZED",
+          "id":       "<wifi-2-uuid>",
+          "name":     "<wifi-2-ssid>",
+          "enabled":  true,
+          "metadata": { "origin": "USER_DEFINED" },
+          "network":  { "type": "NATIVE" },
+          "securityConfiguration": { "type": "WPA2_PERSONAL" }
+        }
+      ],
+      "firewallZones_error":    "Error: [unifi.local.http] HTTP 400 on /v1/sites/{siteId}/firewall/zones: Zone Based Firewall is not configured [api.firewall.zone-based-firewall-not-configured]",
+      "firewallPolicies_error": "Error: [unifi.local.http] HTTP 400 on /v1/sites/{siteId}/firewall/policies: Zone Based Firewall is not configured [api.firewall.zone-based-firewall-not-configured]",
+      "aclRules": [],
+      "devices": [
+        { "summary": { "id": "<device-1-uuid>", "macAddress": "<mac-1>", "ipAddress": "<lan-ip>", "name": "<ap-1-name>",   "model": "U6 Lite", "state": "ONLINE", "supported": true, "firmwareVersion": "6.7.41", "firmwareUpdatable": false, "features": ["accessPoint"], "interfaces": ["radios"] } },
+        { "summary": { "id": "<device-2-uuid>", "macAddress": "<mac-2>", "ipAddress": "<lan-ip>", "name": "<ap-2-name>",   "model": "U6 Lite", "state": "ONLINE", "supported": true, "firmwareVersion": "6.7.41", "firmwareUpdatable": false, "features": ["accessPoint"], "interfaces": ["radios"] } },
+        { "summary": { "id": "<device-3-uuid>", "macAddress": "<mac-3>", "ipAddress": "<wan-ip>", "name": "UDM-Pro",       "model": "UDM Pro", "state": "ONLINE", "supported": true, "firmwareVersion": "5.0.16", "firmwareUpdatable": false, "features": ["switching"],   "interfaces": ["ports"]  } },
+        { "summary": { "id": "<device-4-uuid>", "macAddress": "<mac-4>", "ipAddress": "<lan-ip>", "name": "<ap-3-name>",   "model": "U6 Pro",  "state": "ONLINE", "supported": true, "firmwareVersion": "6.8.2",  "firmwareUpdatable": false, "features": ["accessPoint"], "interfaces": ["radios"] } },
+        { "summary": { "id": "<device-5-uuid>", "macAddress": "<mac-5>", "ipAddress": "<lan-ip>", "name": "U7 Lite",       "model": "U7 Lite", "state": "ONLINE", "supported": true, "firmwareVersion": "8.5.21", "firmwareUpdatable": false, "features": ["accessPoint"], "interfaces": ["radios"] } }
+      ],
+      "clientsTotal":  32,
+      "clientsSample": "[5 of 32 wireless clients elided — UUIDs, MACs, IPs, and device names redacted]"
+    }
+  ]
+}
+
+PROBE METADATA
+  Controller:    UDM-Pro on UniFi OS, Network application 10.3.58
+  Reachable:     HTTPS 200 on /proxy/network/integration/v1/info
+  TLS:           strict-by-default; this run used UNIFI_LOCAL_INSECURE=true
+                 because UDM ships a self-signed cert. Loud
+                 [unifi.local] warning emitted as documented.
+  Spec source:   https://apidoc-cdn.ui.com/network/v10.1.84/integration.json
+                 (closest published spec; controller is on 10.3.58 —
+                 minor delta does not affect the operationIds exercised)
+  Sandbox:       10 host calls, 608 ms wall-clock inside QuickJS
+                 (max budget: 200 calls / 120 s)
+  Site count:    1 (Default)
+  Device count:  5 (UDM Pro + 4 access points: 2× U6 Lite, 1× U6 Pro, 1× U7 Lite)
+  Network count: 1 (Default VLAN 1)
+  WAN count:     2 (Internet 1, Internet 2 — dual-WAN)
+  Wi-Fi count:   2 (1 STANDARD + 1 IOT_OPTIMIZED, both WPA2-Personal)
+  Clients:       32 wireless
+
+REPRODUCER
+  $ UNIFI_LOCAL_BASE_URL=https://172.27.1.1 \
+      UNIFI_LOCAL_INSECURE=true \
+      OP_LOCAL_REF='op://AI Agents/Unifi local api key/password' \
+      npx tsx scripts/discover-local.ts
+  # Reads the local key from 1Password.
+  # Writes the full unsanitized JSON snapshot under
+  #   out/local-network-snapshot-<ts>.json
+  # which is gitignored.
+================================================================================

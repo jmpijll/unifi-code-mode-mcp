@@ -10,15 +10,18 @@
 > **This is a public beta. Install from source. Not on npm yet.**
 >
 > Five sandbox surfaces are wired and tested against an in-process mock
-> controller (98/98 unit + integration tests green). Two surfaces are
-> additionally verified live against a real UDM-Pro:
-> `unifi.cloud.network()` and `unifi.cloud.protect(consoleId)`.
-> End-to-end LLM-mediated invocation is verified through two clients:
-> Cursor's `cursor-agent` (Claude Sonnet 4.6) and `opencode` (DeepSeek
-> v4 Flash). Direct-local Protect, Protect mutations, binary surfaces,
-> and every other agent platform (Claude Code, Claude Desktop, VS Code +
-> Copilot, Codex CLI, Continue, Cline, MCP Inspector, …) are wired but
-> **NOT verified by us**. We need testers — please file
+> controller (98/98 unit + integration tests green). **Four of the five
+> surfaces are also verified live against a real UDM-Pro:**
+> `unifi.local.network` and `unifi.local.protect` (LAN-direct, Network
+> 10.3.58 + Protect 7.0.107) and `unifi.cloud.network()` and
+> `unifi.cloud.protect(consoleId)` (Site Manager connector path against
+> the same hardware). End-to-end LLM-mediated invocation is verified
+> through two clients on the cloud paths: Cursor's `cursor-agent`
+> (Claude Sonnet 4.6) and `opencode` (DeepSeek v4 Flash). Mutation
+> operations on every surface, binary Protect endpoints, and every
+> other agent platform (Claude Code, Claude Desktop, VS Code + Copilot,
+> Codex CLI, Continue, Cline, MCP Inspector, …) are wired but **NOT
+> verified by us**. We need testers — please file
 > [verification reports](.github/ISSUE_TEMPLATE/verification_report.yml)
 > and [bug reports](.github/ISSUE_TEMPLATE/bug_report.yml) with whatever
 > you find. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the rules and
@@ -135,8 +138,10 @@ What we have **directly verified** so far:
 | Integration tests (in-process MCP transport) | `InMemoryTransport` against `createMcpServer` + a mock UniFi controller (Network + Protect) | ✅ green |
 | Integration tests (real Streamable HTTP transport) | `StreamableHTTPClientTransport` over a real HTTP listener | ✅ green |
 | Protect surface against a mock controller | `unifi.local.protect.*` end-to-end via the integration harness with the bundled fallback spec | ✅ green (see Scenario D in `src/__tests__/integration/scenarios.test.ts`) |
-| Live read-only sweep on a real Network | `scripts/discover-network.ts` against a real UDM-Pro via `unifi.cloud.network()` | ✅ produced 28 KB JSON snapshot, plus HLD/LLD/best-practices Markdown |
-| **Live read-only sweep of cloud-Protect** | `scripts/discover-protect.ts` against a real UDM-Pro running Protect 7.0.107 via `unifi.cloud.protect(consoleId)` | ✅ official OpenAPI loaded from `apidoc-cdn.ui.com/protect/v7.0.107/integration.json` (35 ops); `getProtectMetaInfo` returned `applicationVersion: "7.0.107"`; `listCameras` returned 4 cameras with name/state. Sanitized transcript at `out/verification/cloud-protect-live-smoke.txt` |
+| Live read-only sweep on a real Network (cloud) | `scripts/discover-network.ts` against a real UDM-Pro via `unifi.cloud.network()` | ✅ produced 28 KB JSON snapshot, plus HLD/LLD/best-practices Markdown |
+| Live read-only sweep of cloud-Protect | `scripts/discover-protect.ts` against a real UDM-Pro running Protect 7.0.107 via `unifi.cloud.protect(consoleId)` | ✅ official OpenAPI loaded from `apidoc-cdn.ui.com/protect/v7.0.107/integration.json` (35 ops); `getProtectMetaInfo` returned `applicationVersion: "7.0.107"`; `listCameras` returned 4 cameras with name/state. Sanitized transcript at `out/verification/cloud-protect-live-smoke.txt` |
+| **Live read-only sweep of LAN-direct Network** | `scripts/discover-local.ts` against the same UDM-Pro running Network 10.3.58 via `unifi.local.*` | ✅ Network 10.1.84 spec resolved (67 ops); 1 site / 5 devices (UDM-Pro + 4 access points) / 2 WAN / 2 Wi-Fi / 32 wireless clients enumerated through 10 sandbox host calls in 608 ms. Sanitized transcript at `out/verification/local-network-live-smoke.txt` |
+| **Live read-only sweep of LAN-direct Protect** | `scripts/discover-local.ts` against the same UDM-Pro running Protect 7.0.107 via `unifi.local.protect.*` | ✅ official Protect 7.0.107 spec resolved (35 ops); 4 cameras with full metadata returned in 162 ms; identical results to the cloud-Protect run on the same hardware (cross-confirms the wire path). Sanitized transcript at `out/verification/local-protect-live-smoke.txt` |
 | `cursor-agent mcp list-tools unifi` (protocol smoke) | local CLI, no LLM | ✅ both `search` and `execute` exposed |
 | End-to-end LLM-mediated invocation via cursor-agent | Claude Sonnet 4.6 driving the server through `cursor-agent` in interactive PTY mode | ✅ JSON-RPC roundtrip, correct value returned (see `out/verification/cursor-agent-sonnet-mcp-call.txt`) |
 | End-to-end LLM-mediated invocation via opencode | DeepSeek v4 Flash via `opencode-go` provider, project-scoped `opencode.json`, opencode v1.14.30 | ✅ MCP tools auto-injected as `unifi_search` / `unifi_execute`, model called `unifi_search` with the right code, server returned `"9"`, model echoed it (see `out/verification/opencode-deepseek-mcp-call.txt`) |
@@ -150,8 +155,8 @@ What is **not yet verified** (and where help is welcome):
 - Long-running soak / stability under sustained load.
 - Real UniFi networks other than the one author's homelab — we cannot generalise resilience claims from a single network.
 - More than one model on each verified client (only one model per client has been driven end-to-end so far — Sonnet 4.6 on cursor-agent, DeepSeek v4 Flash on opencode).
-- **Direct local Protect path** (`https://<controller>/proxy/protect/integration/*` via `unifi.local.protect.*`). The cloud path was just verified live — the local path is the same `HttpClient` shape with a different prefix, but no LAN-side smoke run has been captured yet.
-- **Mutation operations on Protect.** The 2026-05-07 live verification only exercised read-only ops (`GET /v1/meta/info`, `GET /v1/cameras`). PTZ commands (`POST /v1/cameras/{id}/ptz/goto/{slot}`, etc.), `disableCameraMicPermanently`, and the alarm-manager webhook trigger are wired but not yet driven against real hardware.
+- **End-to-end LLM-mediated invocation against the LAN-direct surfaces.** The 2026-05-07 LAN sweep was driven by a Node script directly through `ExecuteExecutor`. We've live-verified an LLM driving the cloud paths through `cursor-agent` and `opencode`; the same flow against `unifi.local.*` and `unifi.local.protect.*` has not been recorded yet.
+- **Mutation operations on any surface.** All 2026-05-07 live verifications exercised read-only ops only. Network mutations (PATCH/POST/DELETE on sites, networks, Wi-Fi, ACLs, firewall, etc.) and Protect mutations (`POST /v1/cameras/{id}/ptz/goto/{slot}`, `POST /v1/cameras/{id}/disable-mic-permanently`, alarm-manager webhook trigger) are wired but not yet driven against real hardware.
 - **Binary / streaming Protect surfaces.** Snapshots (`/snapshot`), RTSPS streams (`/rtsps-stream`), talk-back sessions (`/talkback-session`), and the WebSocket `subscribe/*` endpoints are all on the Protect spec but the JSON-only `HttpClient` doesn't speak them yet.
 
 Two client-specific subtleties worth calling out:
@@ -161,8 +166,8 @@ Two client-specific subtleties worth calling out:
 
 ### Roadmap
 
-- **Verify the direct-local Protect path** against a Protect-enabled console on the LAN (`unifi.local.protect.*`). Cloud-Protect was verified live on 2026-05-07; local is the same shape but unproven on real hardware
-- **Verify Protect mutation paths** (PTZ commands, disable-mic, alarm-manager webhook trigger) — the 2026-05-07 live run was read-only
+- **Verify mutation paths on a real controller.** All 2026-05-07 live verifications were read-only. Lowest-risk first: toggle a Wi-Fi network on/off (Network), `POST /v1/cameras/{id}/ptz/goto/{slot}` to a known preset (Protect), then progressively riskier ones
+- **End-to-end LLM-mediated invocation against the LAN-direct surfaces.** Cloud paths are live-verified through both `cursor-agent` and `opencode`; the same flow against `unifi.local.*` and `unifi.local.protect.*` has not been recorded yet
 - **Tag/operationId normalization for the official Protect spec** — Ubiquiti's CDN spec ships with `operationId: null` and verbose tag names like `"Camera PTZ control & management"`. The synthesizer produces friendly names like `cameraPtzPatrolStart`, but the tag namespace becomes `cameraPtzControlManagement`. Compact-tag heuristics are a follow-up
 - **Broaden the bundled fallback** beyond the current ~18 JSON-over-HTTP ops, or expose binary surfaces (snapshots, RTSPS metadata, files) once the sandbox supports them
 - **Protect WebSocket events** (`/v1/subscribe/events`, `/v1/subscribe/devices`) — currently out of scope

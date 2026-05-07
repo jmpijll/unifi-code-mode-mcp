@@ -48,8 +48,8 @@ Pick the surface based on what the user has:
 - **Cloud-managed console, you only have a cloud API key.** →
   `unifi.cloud.network(consoleId)` for Network ops; `unifi.cloud` for
   Site-Manager-only ops (multi-console listing, ISP metrics, SD-WAN);
-  `unifi.cloud.protect(consoleId)` for Protect (treat as best-effort —
-  see §10).
+  `unifi.cloud.protect(consoleId)` for Protect (live-verified against a
+  real UDM-Pro running Protect 7.0.107 — see §10).
 - **Multiple consoles under one Site Manager account.** → discover them
   with `unifi.cloud.callOperation('listHosts')` (or
   `request('GET', '/v1/hosts')`) and then build per-console proxies.
@@ -260,7 +260,8 @@ const detail = cams.data.length > 0
 });
 ```
 
-For the cloud-proxied variant (treat as best-effort):
+For the cloud-proxied variant (live-verified against a real UDM-Pro
+running Protect 7.0.107):
 
 ```js
 const protect = unifi.cloud.protect(consoleId);
@@ -268,10 +269,11 @@ const cameras = protect.callOperation('listCameras', {});
 cameras.data.length;
 ```
 
-If `unifi.cloud.protect()` returns `[unifi.cloud.protect.http] 404` or
-similar against a real console, that's the signal that Ubiquiti's cloud
-connector does not yet proxy Protect — fall back to `unifi.local.protect`
-through a direct controller connection.
+If you do see `[unifi.cloud.protect.http] 404` against a real console,
+the most likely cause is that Protect is not installed on that
+particular console, not that the connector path is wrong. Fall back to
+`unifi.local.protect` through a direct controller connection if you
+have LAN reachability.
 
 ## 10. Caveats and known unknowns
 
@@ -305,12 +307,21 @@ through a direct controller connection.
 - **`unifi.cloud.protect(consoleId)` is verified on real hardware**
   against a UDM-Pro running Protect 7.0.107 (read-only sweep,
   2026-05-07 — see `out/verification/cloud-protect-live-smoke.txt`).
-- **`unifi.local.protect.*` is mock-verified, not live-verified yet.**
-  Same `HttpClient` shape with a different prefix; should work, but no
-  LAN-side smoke captured.
-- **Mutations on Protect (PTZ commands, disable-mic, etc.) are wired
-  but not yet exercised live** — the live read-only sweep only
-  validated `getProtectMetaInfo` and `listCameras`.
+- **`unifi.local.protect.*` is also verified on real hardware** against
+  the same UDM-Pro (read-only sweep, 2026-05-07 — see
+  `out/verification/local-protect-live-smoke.txt`). Returned identical
+  4-camera result to the cloud-Protect run on the same controller.
+- **`unifi.local.*` is verified on real hardware** against a UDM-Pro
+  running Network 10.3.58 (read-only sweep, 2026-05-07 — 1 site / 5
+  devices / 2 WAN / 2 Wi-Fi / 32 clients enumerated, see
+  `out/verification/local-network-live-smoke.txt`).
+- **Mutations on every surface (Network and Protect) are wired but not
+  yet exercised live.** The 2026-05-07 live sweeps were read-only:
+  Network listed sites/networks/wifi/devices/clients, Protect called
+  `getProtectMetaInfo` and `listCameras`. PATCH/POST/DELETE on Network
+  resources, PTZ commands, `disableCameraMicPermanently`, and the
+  alarm-manager webhook trigger are wired through the spec but unproven
+  against real hardware.
 - **Binary/streaming Protect ops** (snapshot bytes, RTSPS streams,
   talk-back, `subscribe/*` WebSockets) are present in the spec but the
   JSON-only `HttpClient` doesn't speak them yet.

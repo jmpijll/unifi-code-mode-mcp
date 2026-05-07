@@ -16,6 +16,17 @@ section is self-contained.
   particular client mode doesn't expose custom tools to the LLM in the
   current release. See notes per platform.
 
+> **Surface verification (independent of agent platform).** Four of the
+> five sandbox surfaces are live-verified against a real UDM-Pro
+> (`unifi.local.*`, `unifi.local.protect.*`, `unifi.cloud.network()`,
+> `unifi.cloud.protect()`). The remaining surface (`unifi.cloud` — Site
+> Manager native) is exercised in passing by every cloud-side
+> verification. End-to-end *LLM-mediated* invocation has been verified
+> against the cloud paths only — the LAN-direct paths were live-
+> verified via the project's discovery script. See the
+> [project status](https://github.com/jmpijll/unifi-code-mode-mcp#project-status)
+> callout.
+
 ## Prerequisites (every platform)
 
 ```bash
