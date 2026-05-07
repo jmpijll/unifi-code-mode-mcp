@@ -293,22 +293,34 @@ through a direct controller connection.
   exposed; secrets are not), WireGuard peer lists, Talk/Access state.
   Protect is exposed via its own Integration API at
   `/proxy/protect/integration/v1/...` (use `unifi.local.protect`).
-- **Protect surfaces are mock-verified, not yet live-verified.** The
-  loader auto-fetches Ubiquiti's official spec at
+- **Protect surfaces — what's verified, what's not.** The loader
+  auto-fetches Ubiquiti's official spec at
   `apidoc-cdn.ui.com/protect/v<version>/integration.json` (confirmed
-  available for v7.0.107 and v7.0.94); when it can reach the CDN you
-  get the full ~25-path surface across cameras, NVRs, sensors, lights,
-  chimes, viewers, liveviews, alarm-manager webhooks, files, RTSPS
-  streams, talk-back, and `subscribe/*` WebSockets. When the CDN is
-  unreachable, the bundled fallback covers ~18 JSON-over-HTTP ops; if
-  you need more in offline mode, set `UNIFI_PROTECT_SPEC_URL=<full-spec>`.
-  Both `unifi.local.protect` and `unifi.cloud.protect(consoleId)` URL
-  patterns are officially documented by Ubiquiti (the docs site has a
-  "Remote" / "Local" base-URL selector that maps each operation to
-  exactly the paths this server emits). Neither has been exercised
-  against a live Protect controller yet — when in doubt, prefer
-  `unifi.local.protect` (more direct, fewer moving parts) and surface
-  any non-200 cleanly so the user can diagnose.
+  v7.0.107 and v7.0.94); when reachable you get the full ~25-path
+  surface across cameras, NVRs, sensors, lights, chimes, viewers,
+  liveviews, alarm-manager webhooks, files, RTSPS streams, talk-back,
+  and `subscribe/*` WebSockets. When the CDN is unreachable, the
+  bundled fallback covers ~18 JSON-over-HTTP ops. To override:
+  `UNIFI_PROTECT_SPEC_URL=<full-spec>`.
+- **`unifi.cloud.protect(consoleId)` is verified on real hardware**
+  against a UDM-Pro running Protect 7.0.107 (read-only sweep,
+  2026-05-07 — see `out/verification/cloud-protect-live-smoke.txt`).
+- **`unifi.local.protect.*` is mock-verified, not live-verified yet.**
+  Same `HttpClient` shape with a different prefix; should work, but no
+  LAN-side smoke captured.
+- **Mutations on Protect (PTZ commands, disable-mic, etc.) are wired
+  but not yet exercised live** — the live read-only sweep only
+  validated `getProtectMetaInfo` and `listCameras`.
+- **Binary/streaming Protect ops** (snapshot bytes, RTSPS streams,
+  talk-back, `subscribe/*` WebSockets) are present in the spec but the
+  JSON-only `HttpClient` doesn't speak them yet.
+- **Tag namespacing differs between fallback and CDN-loaded specs.**
+  The fallback uses short tags (`cameras`, `nvrs`, `meta`); the
+  official spec uses verbose tags like `"Camera PTZ control &
+  management"` which normalize to `cameraPtzControlManagement`. When
+  in doubt, use `unifi.local.protect.callOperation('<opId>', args)`
+  (flat lookup) or `request({ method, path })` (path-based, naming-
+  agnostic) instead of typed tag.method() lookups.
 - **Snapshots in this repo's `out/` folder contain MAC and IP material**
   and are gitignored. Do not paste them into chats unless the user is
   the network owner.
