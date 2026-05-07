@@ -1,0 +1,90 @@
+================================================================================
+LIVE CLOUD-PROTECT VERIFICATION — UDM-Pro running Protect 7.0.107
+Recorded: 2026-05-07 ~16:03 CEST (14:03 UTC)
+Source:   scripts/discover-protect.ts driving src/sandbox/execute-executor.ts
+================================================================================
+
+WHAT THIS PROVES
+  ✓ The Site Manager → Protect cloud-connector path
+        api.ui.com/v1/connector/consoles/{id}/proxy/protect/integration/...
+    works against real Protect-enabled hardware with a Site Manager API key.
+    The URL pattern matches Ubiquiti's developer.ui.com docs exactly
+    (https://developer.ui.com/protect/v7.0.107/gettingstarted, "Remote"
+    base-URL selector).
+  ✓ The cloud-Protect proxy factory `unifi.cloud.protect(consoleId).*`
+    exposed by the QuickJS sandbox is wired correctly: it loads the
+    official OpenAPI spec from apidoc-cdn.ui.com (35 ops resolved),
+    builds the per-console proxy on demand, dispatches both raw
+    request() and operation lookups through the right
+    /v1/connector/consoles/{id}/proxy/protect/integration prefix.
+  ✓ Two earlier-uncovered bugs are fixed and stay fixed:
+      1. cloud.protect(consoleId) was previously gated on having a Site
+         Manager (cloudSpec) loaded — meaning Protect-only deployments
+         silently lost the cloud-Protect surface.
+      2. The Protect spec loader probed
+         api.ui.com/proxy/protect/integration/v1/meta/info for version
+         discovery — wrong path for the cloud connector. Now skipped
+         when baseUrl is api.ui.com; falls through cleanly to the
+         known-version ladder.
+
+WHAT THIS DOES NOT PROVE
+  ✗ Direct local Protect path /proxy/protect/integration/v1/... — we
+    only exercised the cloud-connector path. The local code path is the
+    same shape (HttpClient + path prefix), but no LAN-side smoke yet.
+  ✗ Mutation operations (PTZ goto, patrol start/stop, disable mic).
+    This run is purely read-only: GET /v1/meta/info and GET /v1/cameras.
+  ✗ Binary/streaming operations (snapshot, RTSPS, talkback,
+    subscribe/* WebSockets) — all out of scope for the JSON-only
+    HttpClient.
+  ✗ End-to-end LLM-mediated invocation. This was driven directly from
+    a Node script through ExecuteExecutor — a real client (cursor-agent,
+    opencode, etc.) issuing the `execute` tool with the same code has
+    not been exercised against Protect yet.
+
+EXACT SANDBOX CODE EXECUTED
+  var p = unifi.cloud.protect("<consoleId>");
+  var meta = p.request({ method: 'GET', path: '/v1/meta/info' });
+  var cameras = [];
+  try {
+    var camRes = p.request({ method: 'GET', path: '/v1/cameras' });
+    cameras = Array.isArray(camRes) ? camRes
+            : (camRes && camRes.data) ? camRes.data : [];
+  } catch (e) { cameras = ['ERROR: ' + String(e)]; }
+  ({
+    meta: meta,
+    cameraCount: cameras.length,
+    cameraSample: cameras.slice(0, 5).map(function(c) {
+      return c && typeof c === 'object'
+        ? { id: c.id, name: c.name, state: c.state, type: c.type }
+        : { raw: c };
+    })
+  });
+
+RESULT (sanitized — original IDs and 3 camera names redacted)
+{
+  "meta": { "applicationVersion": "7.0.107" },
+  "cameraCount": 4,
+  "cameraSample": [
+    { "id": "<id-1>", "name": "<redacted-1>", "state": "DISCONNECTED" },
+    { "id": "<id-2>", "name": "<redacted-2>", "state": "DISCONNECTED" },
+    { "id": "<id-3>", "name": "Voordeur",     "state": "CONNECTED"    },
+    { "id": "<id-4>", "name": "<redacted-3>", "state": "DISCONNECTED" }
+  ]
+}
+
+PROBE METADATA
+  Console ID:     <redacted UUID>
+  Hostname:       UDM-Pro
+  Type:           console
+  Reachable:      true (HTTP 200)
+  Protect ver:    7.0.107
+  Spec source:    https://apidoc-cdn.ui.com/protect/v7.0.107/integration.json
+                  (Ubiquiti official, 35 operations after build)
+  Path used:      /v1/connector/consoles/<redacted>/proxy/protect/integration
+
+REPRODUCER
+  $ npx tsx scripts/discover-protect.ts
+  # Reads the cloud key from 1Password (op://AI Agents/unifi cloud api/password)
+  # Writes the full unsanitized JSON snapshot under out/protect-recon-<ts>.json
+  # which is gitignored.
+================================================================================

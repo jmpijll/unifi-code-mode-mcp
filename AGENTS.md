@@ -276,12 +276,19 @@ Before claiming "this works with X", check the table in
 [`README.md` → Verification status](README.md#verification-status).
 We have directly verified:
 
-- 94/94 unit + integration tests (in-process MCP transport + real HTTP
+- 98/98 unit + integration tests (in-process MCP transport + real HTTP
   transport) against a mock UniFi controller. The mock now serves both
   `/proxy/network/integration/*` and `/proxy/protect/integration/*`.
 - A real read-only sweep of the maintainer's home Network through
   `unifi.cloud.network()` end-to-end, with HLD/LLD/best-practices docs
   generated from the result.
+- **A real read-only sweep of cloud-Protect** through
+  `unifi.cloud.protect(consoleId)` against a UDM-Pro running Protect
+  7.0.107 (2026-05-07). The loader pulled the official spec from
+  `apidoc-cdn.ui.com/protect/v7.0.107/integration.json` (35 ops);
+  `getProtectMetaInfo` and `listCameras` returned a real
+  `applicationVersion` and 4 real cameras. Sanitized transcript at
+  `out/verification/cloud-protect-live-smoke.txt`.
 - Protocol-level registration via `cursor-agent mcp list-tools unifi`.
 - Two end-to-end LLM-mediated invocations against two different
   clients with two different models:
@@ -300,17 +307,15 @@ Things we have **not** yet verified:
 - Long-running soak / stability under sustained load.
 - More than one model on each verified client (we drove only one model
   per client end-to-end).
-- **The Protect surface against a real Protect-enabled UniFi OS device.**
-  All Protect tests run against the mock controller. The first time
-  someone runs the server against a real Protect deployment, expect
-  bumps — the bundled curated spec was written from public observation,
-  not a real `/v1/meta/info` response.
-- **The cloud-Protect connector path.** Ubiquiti has not publicly
-  documented that `api.ui.com/v1/connector/consoles/{id}/proxy/protect/integration`
-  exists. We expose it on the assumption it follows the Network
-  connector's pattern. If it does not, calls return a structured
-  `[unifi.cloud.protect.http]` error and the model should fall back to
-  the local surface.
+- **Direct local Protect path** (`unifi.local.protect.*`) against a
+  Protect-enabled console on the LAN. Same `HttpClient` shape as the
+  cloud-proxied variant we just verified, but no LAN-side smoke.
+- **Mutation operations on Protect** — PTZ commands, disable-mic, the
+  alarm-manager webhook trigger. Wired and indexed but the live read-
+  only sweep didn't exercise them.
+- **Binary / streaming Protect surfaces** (snapshot bytes, RTSPS
+  metadata, talk-back, `subscribe/*` WebSockets) — present in the
+  spec, but the JSON-only `HttpClient` doesn't speak them yet.
 
 If you add new client coverage, update the table in the README in the
 same PR. Do not silently widen the "verified" surface.

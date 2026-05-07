@@ -107,11 +107,12 @@ What we have **directly verified** so far:
 
 | Layer | How | Result |
 |---|---|---|
-| Unit tests | Vitest, 94 specs across spec loader, dispatcher, sandbox, server, Protect surfaces | ✅ all green |
+| Unit tests | Vitest, 98 specs across spec loader, dispatcher, sandbox, server, Protect surfaces | ✅ all green |
 | Integration tests (in-process MCP transport) | `InMemoryTransport` against `createMcpServer` + a mock UniFi controller (Network + Protect) | ✅ green |
 | Integration tests (real Streamable HTTP transport) | `StreamableHTTPClientTransport` over a real HTTP listener | ✅ green |
 | Protect surface against a mock controller | `unifi.local.protect.*` end-to-end via the integration harness with the bundled fallback spec | ✅ green (see Scenario D in `src/__tests__/integration/scenarios.test.ts`) |
-| Live read-only sweep on a real Network | `scripts/discover-network.ts` against a real UDM-Pro-Max via `unifi.cloud.network()` | ✅ produced 28 KB JSON snapshot, plus HLD/LLD/best-practices Markdown |
+| Live read-only sweep on a real Network | `scripts/discover-network.ts` against a real UDM-Pro via `unifi.cloud.network()` | ✅ produced 28 KB JSON snapshot, plus HLD/LLD/best-practices Markdown |
+| **Live read-only sweep of cloud-Protect** | `scripts/discover-protect.ts` against a real UDM-Pro running Protect 7.0.107 via `unifi.cloud.protect(consoleId)` | ✅ official OpenAPI loaded from `apidoc-cdn.ui.com/protect/v7.0.107/integration.json` (35 ops); `getProtectMetaInfo` returned `applicationVersion: "7.0.107"`; `listCameras` returned 4 cameras with name/state. Sanitized transcript at `out/verification/cloud-protect-live-smoke.txt` |
 | `cursor-agent mcp list-tools unifi` (protocol smoke) | local CLI, no LLM | ✅ both `search` and `execute` exposed |
 | End-to-end LLM-mediated invocation via cursor-agent | Claude Sonnet 4.6 driving the server through `cursor-agent` in interactive PTY mode | ✅ JSON-RPC roundtrip, correct value returned (see `out/verification/cursor-agent-sonnet-mcp-call.txt`) |
 | End-to-end LLM-mediated invocation via opencode | DeepSeek v4 Flash via `opencode-go` provider, project-scoped `opencode.json`, opencode v1.14.30 | ✅ MCP tools auto-injected as `unifi_search` / `unifi_execute`, model called `unifi_search` with the right code, server returned `"9"`, model echoed it (see `out/verification/opencode-deepseek-mcp-call.txt`) |
@@ -125,7 +126,9 @@ What is **not yet verified** (and where help is welcome):
 - Long-running soak / stability under sustained load.
 - Real UniFi networks other than the one author's homelab — we cannot generalise resilience claims from a single network.
 - More than one model on each verified client (only one model per client has been driven end-to-end so far — Sonnet 4.6 on cursor-agent, DeepSeek v4 Flash on opencode).
-- **Protect against a real, Protect-enabled UniFi OS device.** Both the local path (`/proxy/protect/integration/*`) and the cloud-connector path (`api.ui.com/v1/connector/consoles/{id}/proxy/protect/integration/*`) are officially documented by Ubiquiti at `developer.ui.com/protect/v7.0.107/gettingstarted` (with a "Remote" / "Local" base-URL selector), and the loader auto-fetches the official `apidoc-cdn.ui.com/protect/v<version>/integration.json` for both v7.0.107 and v7.0.94. We have **not yet** exercised either path against a live Protect controller — only against the in-process mock harness — so live HTTP behaviour, edge cases (e.g. PTZ commands), and binary surfaces (snapshots, RTSPS streams, talk-back) are still unproven.
+- **Direct local Protect path** (`https://<controller>/proxy/protect/integration/*` via `unifi.local.protect.*`). The cloud path was just verified live — the local path is the same `HttpClient` shape with a different prefix, but no LAN-side smoke run has been captured yet.
+- **Mutation operations on Protect.** The 2026-05-07 live verification only exercised read-only ops (`GET /v1/meta/info`, `GET /v1/cameras`). PTZ commands (`POST /v1/cameras/{id}/ptz/goto/{slot}`, etc.), `disableCameraMicPermanently`, and the alarm-manager webhook trigger are wired but not yet driven against real hardware.
+- **Binary / streaming Protect surfaces.** Snapshots (`/snapshot`), RTSPS streams (`/rtsps-stream`), talk-back sessions (`/talkback-session`), and the WebSocket `subscribe/*` endpoints are all on the Protect spec but the JSON-only `HttpClient` doesn't speak them yet.
 
 Two client-specific subtleties worth calling out:
 
@@ -134,7 +137,9 @@ Two client-specific subtleties worth calling out:
 
 ### Roadmap
 
-- **Verify Protect against a real Protect-enabled console** — covers both `unifi.local.protect.*` and `unifi.cloud.protect(consoleId).*`; both URL patterns are officially documented but neither has yet been exercised live by us
+- **Verify the direct-local Protect path** against a Protect-enabled console on the LAN (`unifi.local.protect.*`). Cloud-Protect was verified live on 2026-05-07; local is the same shape but unproven on real hardware
+- **Verify Protect mutation paths** (PTZ commands, disable-mic, alarm-manager webhook trigger) — the 2026-05-07 live run was read-only
+- **Tag/operationId normalization for the official Protect spec** — Ubiquiti's CDN spec ships with `operationId: null` and verbose tag names like `"Camera PTZ control & management"`. The synthesizer produces friendly names like `cameraPtzPatrolStart`, but the tag namespace becomes `cameraPtzControlManagement`. Compact-tag heuristics are a follow-up
 - **Broaden the bundled fallback** beyond the current ~18 JSON-over-HTTP ops, or expose binary surfaces (snapshots, RTSPS metadata, files) once the sandbox supports them
 - **Protect WebSocket events** (`/v1/subscribe/events`, `/v1/subscribe/devices`) — currently out of scope
 - **Per-tenant rate limiting** keyed on hashed credentials (currently per-IP)
