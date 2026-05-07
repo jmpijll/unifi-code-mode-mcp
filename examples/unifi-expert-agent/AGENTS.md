@@ -161,46 +161,64 @@ You are running through a **beta** MCP server. In particular:
   verification but has no dedicated read-only sweep transcript yet —
   ask the user before driving anything more than `listHosts` /
   `listSites`.
-- **End-to-end LLM-mediated invocation against the LAN-direct surfaces
-  (`unifi.local.*` and `unifi.local.protect.*`) has not been recorded
-  yet.** The cloud paths are LLM-verified through both `cursor-agent`
-  and `opencode`; the LAN-direct paths were exercised live but only
-  through the project's discovery script. If you're successfully
-  driving a LAN-direct call right now, that *is* a useful data point —
-  ask the user if they'll file a verification report.
-- **Mutation operations on every surface (Network and Protect)** are
-  wired through the spec but never exercised live by the maintainer.
-  Apply §1 with extra care.
+- **LLM-mediated invocation is verified for `unifi.local.*` (Network)
+  via DeepSeek v4 Flash through opencode** (2026-05-07). The Protect
+  equivalent (`unifi.local.protect.*` driven by an LLM) has not been
+  recorded yet. If you're successfully driving a LAN-direct Protect
+  call right now, ask the user if they'll file a verification report
+  — that's a useful data point.
+- **Protect camera-rename mutation is live-verified** (a self-reverting
+  `PATCH /v1/cameras/{id}` round-trip on a DISCONNECTED camera). All
+  other mutations — Network `createX` / `updateX` / `deleteX`, Protect
+  PTZ commands, `disableCameraMicPermanently`, alarm-manager webhook
+  trigger, `rtsps-stream` enable/disable — are wired through the spec
+  but never exercised live by the maintainer. Apply §1 with extra care.
+  Network create endpoints additionally need polymorphic-discriminator
+  enums the loader doesn't yet expose; they will fail with
+  `api.request.missing-type-id` if you try.
 - **Other agent platforms** that aren't Cursor or opencode are not
   verified. If you're running on Claude Code / Claude Desktop / VS Code
-  Copilot / Codex CLI / Continue / Cline / MCP Inspector / Aider / Zed
-  / something custom — and you're working — please ask the user to file
-  a verification report. We need that data.
+  Copilot / Codex CLI / Continue / Cline / Aider / Zed / something
+  custom — and you're working — please ask the user to file a
+  verification report. (The MCP Inspector CLI mode IS verified; the
+  Inspector UI mode is not.) We need that data.
 
 ## Tool-call format reminders
 
 Whatever your underlying agent platform calls them, the two MCP tools
 are exposed under names like `unifi_search` and `unifi_execute` (the
 exact prefix may vary — opencode uses `unifi_*`, Cursor uses
-`mcp_unifi_*`, Claude Desktop usually `unifi__*`). They take:
+`mcp_unifi_*`, Claude Desktop usually `unifi__*`). **Both tools take a
+single argument: `code` (a string of JavaScript).** There is no
+separate `query`, `namespace`, or `args` parameter at the tool level —
+you express your intent inside the JS itself.
 
 ```jsonc
-// search
+// search — call the in-sandbox helper from your code string
 {
-  "query": "firewall zone",
-  "limit": 5,
-  "namespace": "local" // optional: "local" | "cloud" | "local.protect" | "cloud.protect"
+  "code": "searchOperations('local', 'firewall zone', 5)"
+  // namespaces: "local" | "cloud" | "protect"
+  // (cloud-proxied surfaces share specs with their local twins)
 }
 
-// execute
+// execute — entire JS program, last expression is the result
 {
-  "code": "const sites = unifi.local.sites.listSites(); return sites.length;",
-  "args": {} // optional, exposed as `args` inside the sandbox
+  "code": "var sites = unifi.local.sites.listSites(); sites.data.length;"
 }
 ```
 
-The `code` value is the **entire** JavaScript program. The last
-expression's value is what's returned to you.
+**Sandbox dialect — three rules that catch most LLMs:**
+
+1. **No top-level `return`.** The last *expression* is the return
+   value. Use `sites.length;` not `return sites.length;`.
+2. **No top-level `await`.** Host calls block QuickJS synchronously;
+   drop the `await`. If you need real async (e.g. `Promise.all`), wrap
+   in an async IIFE: `(async () => { … })()`.
+3. **Wrap any object literal you want to return in parens** so the
+   parser doesn't treat it as a block: `({ ok: true, count: n });`.
+
+The `code` value is the **entire** JavaScript program. Logs go to a
+separate warnings list; only the final expression's value is returned.
 
 ## Reporting back
 

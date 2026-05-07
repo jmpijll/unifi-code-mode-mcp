@@ -10,10 +10,13 @@ body:
       value: |
         **This is the most useful kind of issue right now.** We've
         verified the server end-to-end with `cursor-agent` (Claude
-        Sonnet 4.6) and `opencode` (DeepSeek v4 Flash). Everything else
-        — Claude Code, Claude Desktop, VS Code + Copilot, Codex CLI,
-        Continue, Cline, MCP Inspector, Aider, Zed, your own client —
-        is theoretically wired but **NOT verified by us**.
+        Sonnet 4.6, cloud surface), `opencode` (DeepSeek v4 Flash, both
+        cloud and LAN-direct Network surfaces), and the MCP Inspector
+        CLI (no LLM, protocol layer only). Everything else — Claude
+        Code, Claude Desktop, VS Code + Copilot, Codex CLI, Continue,
+        Cline, Aider, Zed, the MCP Inspector **UI** mode, HTTP/SSE
+        transports under the Inspector, your own client — is
+        theoretically wired but **NOT verified by us**.
 
         Submit a verification report whether things worked OR didn't.
         Both are useful.

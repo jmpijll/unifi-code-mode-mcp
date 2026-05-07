@@ -10,18 +10,23 @@
 > **This is a public beta. Install from source. Not on npm yet.**
 >
 > Five sandbox surfaces are wired and tested against an in-process mock
-> controller (98/98 unit + integration tests green). **Four of the five
-> surfaces are also verified live against a real UDM-Pro:**
+> controller (105/105 unit + integration tests green). **Four of the
+> five surfaces are also verified live against a real UDM-Pro:**
 > `unifi.local.network` and `unifi.local.protect` (LAN-direct, Network
 > 10.3.58 + Protect 7.0.107) and `unifi.cloud.network()` and
 > `unifi.cloud.protect(consoleId)` (Site Manager connector path against
 > the same hardware). End-to-end LLM-mediated invocation is verified
-> through two clients on the cloud paths: Cursor's `cursor-agent`
-> (Claude Sonnet 4.6) and `opencode` (DeepSeek v4 Flash). Mutation
-> operations on every surface, binary Protect endpoints, and every
-> other agent platform (Claude Code, Claude Desktop, VS Code + Copilot,
-> Codex CLI, Continue, Cline, MCP Inspector, …) are wired but **NOT
-> verified by us**. We need testers — please file
+> through three independent paths: `cursor-agent` interactive PTY
+> (Claude Sonnet 4.6, cloud surface), `opencode` (DeepSeek v4 Flash,
+> cloud surface), and `opencode` (DeepSeek v4 Flash, **LAN-direct
+> Network surface**). Protect mutation is verified through one
+> round-trip (`PATCH /v1/cameras/{id}` rename + revert) and the MCP
+> Inspector CLI is verified end-to-end. Network mutations, LLM-mediated
+> LAN-direct **Protect** invocation, binary Protect endpoints
+> (snapshots, RTSPS, talk-back, WebSockets), the Inspector UI mode, and
+> every other agent platform (Claude Code, Claude Desktop, VS Code +
+> Copilot, Codex CLI, Continue, Cline, Aider, Zed, …) are wired but
+> **NOT verified by us**. We need testers — please file
 > [verification reports](.github/ISSUE_TEMPLATE/verification_report.yml)
 > and [bug reports](.github/ISSUE_TEMPLATE/bug_report.yml) with whatever
 > you find. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the rules and
@@ -134,7 +139,7 @@ What we have **directly verified** so far:
 
 | Layer | How | Result |
 |---|---|---|
-| Unit tests | Vitest, 98 specs across spec loader, dispatcher, sandbox, server, Protect surfaces | ✅ all green |
+| Unit tests | Vitest, 105 specs across spec loader, dispatcher, sandbox, server, tag normalisation, Protect surfaces | ✅ all green |
 | Integration tests (in-process MCP transport) | `InMemoryTransport` against `createMcpServer` + a mock UniFi controller (Network + Protect) | ✅ green |
 | Integration tests (real Streamable HTTP transport) | `StreamableHTTPClientTransport` over a real HTTP listener | ✅ green |
 | Protect surface against a mock controller | `unifi.local.protect.*` end-to-end via the integration harness with the bundled fallback spec | ✅ green (see Scenario D in `src/__tests__/integration/scenarios.test.ts`) |
@@ -157,9 +162,9 @@ What is **not yet verified** (and where help is welcome):
 - Hosted/multi-tenant deployment of the Streamable HTTP transport behind a reverse proxy.
 - Long-running soak / stability under sustained load.
 - Real UniFi networks other than the one author's homelab — we cannot generalise resilience claims from a single network.
-- More than one model on each verified client (only one model per client has been driven end-to-end so far — Sonnet 4.6 on cursor-agent, DeepSeek v4 Flash on opencode).
-- **LLM-mediated invocation against `unifi.local.protect.*`.** DeepSeek v4 Flash via opencode is now live-verified against `unifi.local.*` (Network) — see the verification matrix row above. The Protect equivalent (`unifi.local.protect.callOperation('listCameras')` driven by an LLM) has not been recorded yet.
-- **Network mutation verification.** The 2026-05-07 mutation round-trip only exercised Protect (`PATCH /v1/cameras/{id}` rename + revert). Every Network create endpoint exposed in this controller's spec (`createAclRule`, `createDnsPolicy`, `createNetwork`, `createWifiBroadcast`, `createTrafficMatchingList`, `createFirewallZone`, `createFirewallPolicy`, `createVouchers`) requires a polymorphic discriminator (`$.type`, `$.management`, …) that the loaded OpenAPI spec does **not** currently expose to the synthesizer; probing them blindly against live hardware is unsafe. A future loader pass needs to extract polymorphic-discriminator enums (or we ship known-good fixture bodies per controller version).
+- More than one model per verified client (only one model has been driven end-to-end against each: Sonnet 4.6 on cursor-agent, DeepSeek v4 Flash on opencode for both cloud and LAN-direct Network).
+- **LLM-mediated invocation against `unifi.local.protect.*`.** DeepSeek v4 Flash via opencode is live-verified against `unifi.local.*` (Network) — see the verification matrix row above. The Protect equivalent (`unifi.local.protect.callOperation('listCameras')` driven by an LLM) has not been recorded yet.
+- **Network mutation verification.** The Protect mutation round-trip (`PATCH /v1/cameras/{id}` rename + revert) is live-verified, but every Network create endpoint exposed in this controller's spec (`createAclRule`, `createDnsPolicy`, `createNetwork`, `createWifiBroadcast`, `createTrafficMatchingList`, `createFirewallZone`, `createFirewallPolicy`, `createVouchers`) requires a polymorphic discriminator (`$.type`, `$.management`, …) that the loaded OpenAPI spec does **not** currently expose to the synthesizer; probing them blindly against live hardware is unsafe. A future loader pass needs to extract polymorphic-discriminator enums (or we ship known-good fixture bodies per controller version).
 - **Other Protect mutations beyond camera-rename.** PTZ commands (`POST /v1/cameras/{id}/ptz/goto/{slot}`), `disableCameraMicPermanently` (irreversible per its name), the alarm-manager webhook trigger, and the `rtsps-stream` enable/disable pair are wired but not yet driven against real hardware. The `POST /v1/liveviews` endpoint accepts creates, but the Integration API does **not** expose a DELETE for liveviews — `verify-mutations.ts` therefore never creates one.
 - **Binary / streaming Protect surfaces.** Snapshots (`/snapshot`), RTSPS streams (`/rtsps-stream`), talk-back sessions (`/talkback-session`), and the WebSocket `subscribe/*` endpoints are all on the Protect spec but the JSON-only `HttpClient` doesn't speak them yet.
 
@@ -170,14 +175,15 @@ Two client-specific subtleties worth calling out:
 
 ### Roadmap
 
-- **Network mutation verification.** Camera-rename round-trip on Protect is now live-verified; Network requires polymorphic-discriminator extraction in the spec loader (see "not yet verified" above) before the same pattern can be safely applied to ACL rules, DNS policies, networks, or Wi-Fi broadcasts
-- **End-to-end LLM-mediated invocation against the LAN-direct surfaces.** Cloud paths are live-verified through both `cursor-agent` and `opencode`; the same flow against `unifi.local.*` and `unifi.local.protect.*` has not been recorded yet
-- **Cross-spec polymorphic-discriminator extraction** — every Network 10.3.58 create endpoint returns `api.request.missing-type-id` because the loader doesn't currently expose the polymorphic discriminator enum to the synthesizer. Once that's wired, Network mutations can be live-verified the same way camera-rename was for Protect
+- **Cross-spec polymorphic-discriminator extraction → Network mutation verification.** Every Network 10.3.58 create endpoint (`createAclRule`, `createDnsPolicy`, `createNetwork`, `createWifiBroadcast`, `createTrafficMatchingList`, `createFirewallZone`, `createFirewallPolicy`, `createVouchers`) returns `api.request.missing-type-id` because the loader doesn't currently expose the polymorphic discriminator enum to the synthesizer. Once that's wired, Network mutations can be live-verified the same way the Protect camera-rename round-trip was
+- **LLM-mediated invocation against the LAN-direct Protect surface.** `unifi.local.*` (Network) is now LLM-verified end-to-end via `opencode`; the equivalent against `unifi.local.protect.*` has not been recorded yet
+- **Other Protect mutations beyond camera-rename** — PTZ goto/patrol, alarm-manager webhook trigger, and the `rtsps-stream` enable/disable pair (skipping `disableCameraMicPermanently`, which is irreversible by name)
 - **Broaden the bundled fallback** beyond the current ~18 JSON-over-HTTP ops, or expose binary surfaces (snapshots, RTSPS metadata, files) once the sandbox supports them
 - **Protect WebSocket events** (`/v1/subscribe/events`, `/v1/subscribe/devices`) — currently out of scope
 - **Per-tenant rate limiting** keyed on hashed credentials (currently per-IP)
-- **Optional persistent spec cache** versioned by controller fingerprint
-- **Broader client validation** — confirmed working configs for Claude Desktop, Continue, Cline, Aider, Zed, and the MCP Inspector
+- **Optional persistent spec cache** versioned by controller fingerprint (we already version by `CACHE_SCHEMA_VERSION` to invalidate on internal-shape changes; controller-version pinning is the next layer)
+- **Broader client validation** — confirmed working configs for Claude Desktop, Continue, Cline, Aider, Zed, the MCP Inspector UI mode, and HTTP/SSE transports for the Inspector
+- **NPM publish** — reserved for `1.0.0`. The package is `"private": true` until then.
 
 ## Documentation
 

@@ -21,9 +21,12 @@ section is self-contained.
 > (`unifi.local.*`, `unifi.local.protect.*`, `unifi.cloud.network()`,
 > `unifi.cloud.protect()`). The remaining surface (`unifi.cloud` — Site
 > Manager native) is exercised in passing by every cloud-side
-> verification. End-to-end *LLM-mediated* invocation has been verified
-> against the cloud paths only — the LAN-direct paths were live-
-> verified via the project's discovery script. See the
+> verification. End-to-end *LLM-mediated* invocation is verified
+> against the cloud paths through `cursor-agent` (Sonnet 4.6) and
+> `opencode` (DeepSeek v4 Flash), and against the **LAN-direct
+> Network** path through `opencode` (DeepSeek v4 Flash). The LAN-direct
+> Protect path was exercised live via the project's discovery and
+> mutation scripts but has not yet been driven by an LLM. See the
 > [project status](https://github.com/jmpijll/unifi-code-mode-mcp#project-status)
 > callout.
 
@@ -116,9 +119,12 @@ full set of caveats and a verified transcript.
 
 ---
 
-## opencode — VERIFIED
+## opencode — VERIFIED (cloud + LAN-direct Network)
 
-Add to `opencode.json` at your project root, **or** `~/.opencode/config.json`:
+Add to `opencode.json` at your project root, **or** `~/.opencode/config.json`.
+Pass any combination of credentials through `environment` with
+`{env:VAR}` interpolation so a single `opencode run` can drive both the
+cloud and LAN-direct surfaces:
 
 ```json
 {
@@ -129,17 +135,30 @@ Add to `opencode.json` at your project root, **or** `~/.opencode/config.json`:
       "command": ["node", "/absolute/path/to/unifi-code-mode-mcp/dist/index.js"],
       "enabled": true,
       "environment": {
+        "UNIFI_LOCAL_BASE_URL": "{env:UNIFI_LOCAL_BASE_URL}",
+        "UNIFI_LOCAL_API_KEY": "{env:UNIFI_LOCAL_API_KEY}",
+        "UNIFI_LOCAL_INSECURE": "{env:UNIFI_LOCAL_INSECURE}",
         "UNIFI_CLOUD_API_KEY": "{env:UNIFI_CLOUD_API_KEY}"
       }
     }
+  },
+  "permission": {
+    "unifi_*": "allow"
   }
 }
 ```
 
-Run with:
+Run with whichever creds the prompt needs:
 
 ```bash
+# Cloud surface only
 UNIFI_CLOUD_API_KEY=... opencode --pure run "Use the unifi MCP to list my consoles."
+
+# LAN-direct Network surface (verified 2026-05-07 with DeepSeek v4 Flash):
+UNIFI_LOCAL_BASE_URL=https://172.27.1.1 \
+UNIFI_LOCAL_API_KEY=... \
+UNIFI_LOCAL_INSECURE=true \
+  opencode run "Use the unifi MCP to count sites on my local controller."
 ```
 
 **Loading the persona:** opencode supports per-agent persona files at

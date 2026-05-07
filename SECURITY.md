@@ -41,7 +41,7 @@ In scope:
   prototype pollution between sandbox and host, secret leakage)
 - The credential-resolution path (env vs HTTP headers)
 - TLS handling, including any `UNIFI_*_TLS_INSECURE` overrides
-- The Cloudflare Workers entry (`src/cloudflare/worker.ts`)
+- The Cloudflare Workers entry (`cf-worker/index.ts`)
 - The OpenAPI spec loader and its caching/network behaviour
 - Anything in the published source that could mishandle a customer's
   UniFi controller credentials

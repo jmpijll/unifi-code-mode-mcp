@@ -60,8 +60,11 @@ backed by a sandboxed JS surface that fans out to two separate UniFi APIs.
      `apidoc-cdn.ui.com/protect/v<version>/integration.json` (confirmed
      v7.0.107, v7.0.94); when offline, falls back to the bundled curated
      `src/spec/protect-fallback.json` (~18 JSON-over-HTTP ops). Override
-     with `UNIFI_PROTECT_SPEC_URL`. **Verified against the mock controller
-     only** — no live-Protect end-to-end yet.
+     with `UNIFI_PROTECT_SPEC_URL`. **Live-verified against a real
+     UDM-Pro** running Protect 7.0.107 (read-only sweep + camera-rename
+     mutation round-trip, 2026-05-07 —
+     `out/verification/local-protect-live-smoke.txt`,
+     `out/verification/mutation-live-smoke.txt`).
    - `unifi.cloud.protect(consoleId).*` → Protect Integration API tunneled
      through the Site Manager connector at
      `/v1/connector/consoles/{id}/proxy/protect/integration`. The URL
@@ -92,7 +95,7 @@ backed by a sandboxed JS surface that fans out to two separate UniFi APIs.
 ```bash
 npm install                           # one-time
 npm run typecheck                     # tsc --noEmit
-npm test                              # vitest run (67 cases)
+npm test                              # vitest run (105 cases)
 npm run lint                          # eslint
 npm run format:check                  # prettier
 npm run build                         # tsc → dist/
@@ -107,12 +110,18 @@ For end-to-end smoke against a real controller (read-only):
 export PATH="/opt/homebrew/Caskroom/1password-cli/2.34.0:$PATH"  # macOS
 npm run live-test                     # uses op:// references, no creds in shell
 npx tsx scripts/sandbox-cloud-proxy-smoke.ts   # exercises cloud-network proxy
-npx tsx scripts/discover-network.ts            # full read-only sweep → out/
+npx tsx scripts/discover-network.ts            # cloud Network read-only sweep
+npx tsx scripts/discover-protect.ts            # cloud Protect read-only sweep
+npx tsx scripts/discover-local.ts              # LAN-direct Network + Protect sweep
+npx tsx scripts/verify-mutations.ts            # Protect camera-rename round-trip
 ```
 
 `discover-network.ts` is the canonical example of how the sandbox surface is
 meant to be driven from outside the MCP framing — read it when you need a
-template for a new operational script.
+template for a new operational script. `verify-mutations.ts` is the template
+for safe self-reverting mutation verification (preflight guards on
+DISCONNECTED state, separate executor invocations for mutate and revert,
+fatal exit codes on revert failure).
 
 ---
 
@@ -138,7 +147,10 @@ template for a new operational script.
 | Per-request header storage | `src/server/request-context.ts` |
 | Cloudflare Workers entrypoint | `cf-worker/index.ts` |
 | Live read-only smoke against a tenant | `scripts/live-test.ts` |
-| Full read-only network discovery | `scripts/discover-network.ts` |
+| Cloud Network read-only discovery | `scripts/discover-network.ts` |
+| Cloud Protect read-only discovery | `scripts/discover-protect.ts` |
+| LAN-direct Network + Protect discovery | `scripts/discover-local.ts` |
+| Protect mutation round-trip | `scripts/verify-mutations.ts` |
 
 ---
 
@@ -231,6 +243,25 @@ A few `eslint-disable-*` comments in `src/__tests__/` (e.g.
 construct strings of sandbox JS or assert through known-non-null
 fixtures. Do not strip them.
 
+### 6.7 Bump `CACHE_SCHEMA_VERSION` whenever you change `processSpec` or `buildOperationIndex`
+
+The on-disk processed-spec cache (`src/spec/cache/*.json`) stores the
+*output* of `buildOperationIndex` — including pre-baked `primaryTag`
+strings, parameter shape, and synthesized `operationId`s. Anyone with
+a cached spec on disk gets the old shape until the cache is
+invalidated. `CACHE_SCHEMA_VERSION` (in `src/spec/loader.ts`) is the
+version stamp; a mismatch causes the loader to ignore the cache and
+refetch upstream.
+
+We discovered this the hard way: tag-name compaction (e.g.
+`accessControlAclRules` → `aclRules`) was invisible to anyone with a
+warm cache because `primaryTag` is computed at process-time and stored
+in the cache. The MCP Inspector smoke test surfaced it after the
+binary was rebuilt and tests passed; only after bumping
+`CACHE_SCHEMA_VERSION` did the new accessor names show up in the
+search index. Bump it on any change to the shape produced by
+`processSpec` or `buildOperationIndex`.
+
 ---
 
 ## 7. Code style
@@ -286,9 +317,9 @@ Before claiming "this works with X", check the table in
 [`README.md` → Verification status](README.md#verification-status).
 We have directly verified:
 
-- 98/98 unit + integration tests (in-process MCP transport + real HTTP
-  transport) against a mock UniFi controller. The mock now serves both
-  `/proxy/network/integration/*` and `/proxy/protect/integration/*`.
+- 105/105 unit + integration tests (in-process MCP transport + real
+  HTTP transport) against a mock UniFi controller. The mock serves
+  both `/proxy/network/integration/*` and `/proxy/protect/integration/*`.
 - A real read-only sweep of the maintainer's home Network through
   `unifi.cloud.network()` end-to-end, with HLD/LLD/best-practices docs
   generated from the result.
@@ -311,37 +342,63 @@ We have directly verified:
   162 ms — identical result to the cloud-Protect run on the same
   hardware (cross-confirms the wire path). Sanitized transcript at
   `out/verification/local-protect-live-smoke.txt`.
+- **A live mutation round-trip on Protect** (`PATCH /v1/cameras/{id}`)
+  against the same UDM-Pro: rename a DISCONNECTED camera → GET-verify
+  → revert → GET-verify, three sequential `ExecuteExecutor`
+  invocations, six host calls total. Pre-flight refuses to run on
+  non-DISCONNECTED cameras or names that already match the test
+  pattern. Sanitized transcript at
+  `out/verification/mutation-live-smoke.txt`.
 - Protocol-level registration via `cursor-agent mcp list-tools unifi`.
-- Two end-to-end LLM-mediated invocations against two different
-  clients with two different models:
-  - Claude Sonnet 4.6 through `cursor-agent` interactive PTY mode —
-    evidence at `out/verification/cursor-agent-sonnet-mcp-call.txt`.
-  - DeepSeek v4 Flash through `opencode --pure run` — evidence at
+- **MCP Inspector (CLI mode)** end-to-end against the live UDM-Pro
+  with `@modelcontextprotocol/inspector@0.20.0`: `tools/list`,
+  credential-free `tools/call execute`, credentialled
+  `tools/call search`, and credentialled `tools/call execute` all pass.
+  Inspector pinned at v0.20.0 because v0.21.2 has an upstream
+  missing-`commander` dep on Node v25. Sanitized transcript at
+  `out/verification/mcp-inspector-live-smoke.txt`.
+- **Three end-to-end LLM-mediated invocations:**
+  - Claude Sonnet 4.6 driving the cloud surface through
+    `cursor-agent` interactive PTY mode — evidence at
+    `out/verification/cursor-agent-sonnet-mcp-call.txt`.
+  - DeepSeek v4 Flash driving the cloud surface through
+    `opencode --pure run` — evidence at
     `out/verification/opencode-deepseek-mcp-call.txt`.
+  - DeepSeek v4 Flash driving the **LAN-direct Network** surface
+    through `opencode run` against the UDM-Pro at 172.27.1.1 — the
+    model used `unifi_search` to find `getSiteOverviewPage`, then
+    `unifi_execute` to call it through `callOperation`, returning site
+    count `1`. Self-corrected through 4 syntax attempts using the
+    documented error-shape contract (top-level `return` / `await` are
+    not allowed in QuickJS). Evidence at
+    `out/verification/opencode-deepseek-local-mcp-call.txt`.
 
 Things we have **not** yet verified:
 
 - Cursor IDE chat panel (after a fresh window restart).
 - Other agent / IDE clients (Claude Desktop, Continue, Cline, Codeium,
-  Aider, Zed) and the official MCP Inspector UI.
+  Aider, Zed) and the official MCP Inspector **UI** (browser) mode.
 - A hosted multi-tenant deployment of the Streamable HTTP transport
   behind a reverse proxy.
 - Long-running soak / stability under sustained load.
-- More than one model on each verified client (we drove only one model
-  per client end-to-end).
-- **End-to-end LLM-mediated invocation against the LAN-direct surfaces**
-  (`unifi.local.*` and `unifi.local.protect.*`). The 2026-05-07 LAN
-  sweep was driven by `scripts/discover-local.ts` directly through
-  `ExecuteExecutor`; an LLM client driving the same code via the
-  `execute` MCP tool against the LAN-direct path has not yet been
-  recorded. (LLM-mediated invocation against the cloud paths IS
-  verified — see the `cursor-agent` and `opencode` transcripts above.)
-- **Mutation operations on every surface.** All 2026-05-07 live sweeps
-  were read-only (overview/list endpoints only on Network; `meta/info`
-  and `cameras` on Protect). PATCH/POST/DELETE on Network resources,
-  PTZ commands, `disableCameraMicPermanently`, and the alarm-manager
-  webhook trigger are wired and indexed but unproven against real
-  hardware.
+- More than one model per verified client (we drove only one model
+  end-to-end against each: Sonnet 4.6 on cursor-agent, DeepSeek v4
+  Flash on opencode for both cloud and LAN-direct Network paths).
+- **End-to-end LLM-mediated invocation against the LAN-direct
+  Protect surface.** The Network LAN-direct path is now LLM-verified
+  via opencode/DeepSeek; the Protect equivalent
+  (`unifi.local.protect.callOperation('listCameras')` driven by an
+  LLM) has not yet been recorded.
+- **Mutation operations beyond the Protect camera-rename round-trip.**
+  Network create endpoints (`createAclRule`, `createDnsPolicy`,
+  `createNetwork`, `createWifiBroadcast`, `createTrafficMatchingList`,
+  `createFirewallZone`, `createFirewallPolicy`, `createVouchers`)
+  require a polymorphic discriminator (`$.type`, `$.management`, …)
+  that the loaded OpenAPI spec does not currently surface to the
+  synthesizer; probing them blindly against live hardware is unsafe.
+  Other Protect mutations (PTZ commands,
+  `disableCameraMicPermanently`, alarm-manager webhook trigger,
+  `rtsps-stream` enable/disable) are wired but unproven.
 - **Binary / streaming Protect surfaces** (snapshot bytes, RTSPS
   metadata, talk-back, `subscribe/*` WebSockets) — present in the
   spec, but the JSON-only `HttpClient` doesn't speak them yet.
@@ -379,19 +436,30 @@ Two client-specific gotchas you'll save time knowing about:
 
 ## 10. Roadmap (intentional, not yet implemented)
 
-- **Live verification of mutation paths.** All 2026-05-07 live sweeps
-  were read-only. Lowest-risk first: toggle a Wi-Fi network on/off
-  (Network), `POST /v1/cameras/{id}/ptz/goto/{slot}` to a known preset
-  (Protect), then progressively riskier ones.
-- **End-to-end LLM-mediated invocation against the LAN-direct
-  surfaces.** Cloud paths are live-verified through both `cursor-agent`
-  and `opencode`; the same flow against `unifi.local.*` and
-  `unifi.local.protect.*` has not been recorded yet.
+- **Network mutation verification.** Protect camera-rename round-trip
+  is now live-verified, but every Network create endpoint requires a
+  polymorphic discriminator the loader doesn't currently expose. The
+  next step is a polymorphic-discriminator extraction pass in the
+  spec loader, after which Network mutations can be driven through the
+  same self-reverting pattern (a name-only PATCH on a deletable
+  resource on a non-production site). User-suggested gating: change a
+  name and change it back, or create something inert and delete it
+  again — never touch live config without an explicit revert path.
+- **LLM-mediated invocation against the LAN-direct Protect surface.**
+  `unifi.local.*` (Network) is now LLM-verified end-to-end via
+  `opencode`; the Protect equivalent against `unifi.local.protect.*`
+  has not been recorded.
+- **Other Protect mutations beyond camera-rename** — PTZ goto/patrol,
+  alarm-manager webhook trigger, `rtsps-stream` enable/disable.
+  (Skipping `disableCameraMicPermanently`; irreversible by name.)
 - **Protect WebSocket events** (`/v1/subscribe/events`,
   `/v1/subscribe/devices`, `/v1/cameras/{id}/talkback-session`,
   `/v1/cameras/{id}/rtsps-stream`) — the current sandbox/HTTP-client
   pair only handles JSON-over-HTTP, so streaming surfaces are out of
   scope. Adding them needs a separate transport in the sandbox.
+- **MCP Inspector UI mode + non-stdio transports.** CLI + stdio is
+  verified; UI mode in the browser and HTTP/SSE transports under the
+  Inspector are not.
 - Per-tenant rate limiting (today the limiter is per-IP only).
 - `cf-worker` parity tests so the Workers entry doesn't drift from the
   Node implementation.
