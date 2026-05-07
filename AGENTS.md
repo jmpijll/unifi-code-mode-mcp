@@ -225,10 +225,24 @@ fixtures. Do not strip them.
 - `src/__tests__/spec-loader.test.ts` — CDN fallback + cache behaviour
 - `src/__tests__/spec-index.test.ts` — search index shape + tag normalisation
 - `src/__tests__/http-client.test.ts` — local, cloud, cloud-network proxy
-- `src/__tests__/dispatch.test.ts` — sandbox prelude generation
+- `src/__tests__/dispatch.test.ts` — sandbox prelude generation + arg auto-routing
 - `src/__tests__/sandbox.test.ts` — `ExecuteExecutor` Proxy dispatch end-to-end
+- `src/__tests__/integration/scenarios.test.ts` — full MCP-client → server →
+  mock-UniFi round-trip across both stdio (`InMemoryTransport` linked pair)
+  and Streamable HTTP transports. Each scenario exercises the real
+  `createMcpServer` factory; the mock controller (`mock-controller.ts`)
+  records every request so the tests can assert path substitution and
+  body shape.
 
-When fixing a bug, write a Vitest case before the fix.
+When fixing a bug, write a Vitest case before the fix. The integration
+suite is the right place for "does this work all the way through the
+wire protocol" questions; the unit tests are the right place for the
+"does this function compute the right thing" questions.
+
+For developer-local validation against the real `cursor-agent` CLI (not
+in CI), run `scripts/cursor-cli-smoke.sh`. It generates a temporary
+`.cursor/mcp.json`, drives three fixed prompts (HLD sweep, single-fact,
+intentionally-impossible), and saves transcripts to `out/`.
 
 ---
 

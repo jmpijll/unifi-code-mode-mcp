@@ -1,0 +1,123 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "UniFi Network Integration API (test fixture)",
+    "version": "10.1.84-test"
+  },
+  "servers": [{ "url": "/proxy/network/integration" }],
+  "paths": {
+    "/v1/info": {
+      "get": {
+        "operationId": "getInfo",
+        "summary": "Get controller application info",
+        "tags": ["applicationInfo"],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites": {
+      "get": {
+        "operationId": "getSiteOverviewPage",
+        "summary": "List sites",
+        "tags": ["sites"],
+        "parameters": [
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites/{siteId}/devices": {
+      "get": {
+        "operationId": "getAdoptedDeviceOverviewPage",
+        "summary": "List adopted devices for a site",
+        "tags": ["unifiDevices"],
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites/{siteId}/networks": {
+      "get": {
+        "operationId": "getNetworksOverviewPage",
+        "summary": "List networks for a site",
+        "tags": ["networks"],
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites/{siteId}/wans": {
+      "get": {
+        "operationId": "getWansOverviewPage",
+        "summary": "List WANs for a site",
+        "tags": ["supportingResources"],
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites/{siteId}/wifi/broadcasts": {
+      "get": {
+        "operationId": "getWifiBroadcastPage",
+        "summary": "List Wi-Fi broadcasts for a site",
+        "tags": ["wifiBroadcasts"],
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites/{siteId}/wifi/broadcasts/{wifiBroadcastId}": {
+      "get": {
+        "operationId": "getWifiBroadcastDetails",
+        "summary": "Get a specific Wi-Fi broadcast",
+        "tags": ["wifiBroadcasts"],
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "wifiBroadcastId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      },
+      "put": {
+        "operationId": "updateWifiBroadcast",
+        "summary": "Update a Wi-Fi broadcast",
+        "tags": ["wifiBroadcasts"],
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "wifiBroadcastId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object" } } }
+        },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites/{siteId}/firewall/zones": {
+      "get": {
+        "operationId": "getFirewallZones",
+        "summary": "List firewall zones (ZBF only)",
+        "tags": ["firewall"],
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/sites/{siteId}/clients": {
+      "get": {
+        "operationId": "getConnectedClientOverviewPage",
+        "summary": "List connected clients for a site",
+        "tags": ["clients"],
+        "parameters": [
+          { "name": "siteId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}
