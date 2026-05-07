@@ -358,8 +358,12 @@ have LAN reachability.
 - **Tag namespacing differs between fallback and CDN-loaded specs.**
   The fallback uses short tags (`cameras`, `nvrs`, `meta`); the
   official spec uses verbose tags like `"Camera PTZ control &
-  management"` which normalize to `cameraPtzControlManagement`. When
-  in doubt, use `unifi.local.protect.callOperation('<opId>', args)`
+  management"`, but our tag-name compaction normalises that to a
+  short `cameraPtz` accessor (other Protect tags compact similarly:
+  `camera`, `chime`, `nvr`, `light`, `sensor`, `viewer`, `liveView`,
+  `alarmManager`, `applicationInfo`, `deviceAssetFile`,
+  `websocketUpdates`). When in doubt, use
+  `unifi.local.protect.callOperation('<opId>', args)`
   (flat lookup) or `request({ method, path })` (path-based, naming-
   agnostic) instead of typed tag.method() lookups.
 - **Snapshots in this repo's `out/` folder contain MAC and IP material**

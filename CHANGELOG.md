@@ -52,6 +52,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Tag-name compaction for verbose API-doc boilerplate (BREAKING for
+  tag-grouped accessors).** `normalizeTag` (in
+  `src/spec/index-builder.ts`) now strips common Ubiquiti API-doc
+  boilerplate suffixes (`information & management`, `management`,
+  `integration`, `control & management`), prefers parenthetical
+  aliases (`Access Control (ACL Rules)` → `aclRules`), and folds
+  `Information about X` into `<X> info`. Net effect on the live
+  Protect 7.0.107 spec:
+
+  | Raw tag                              | Old accessor                       | New accessor          |
+  |--------------------------------------|------------------------------------|-----------------------|
+  | Camera information & management      | `cameraInformationManagement`      | `camera`              |
+  | Camera PTZ control & management      | `cameraPtzControlManagement`       | `cameraPtz`           |
+  | Chime information & management       | `chimeInformationManagement`       | `chime`               |
+  | Light information & management       | `lightInformationManagement`       | `light`               |
+  | NVR information & management         | `nvrInformationManagement`         | `nvr`                 |
+  | Sensor information & management      | `sensorInformationManagement`      | `sensor`              |
+  | Viewer information & management      | `viewerInformationManagement`      | `viewer`              |
+  | Live view management                 | `liveViewManagement`               | `liveView`            |
+  | Device asset file management         | `deviceAssetFileManagement`        | `deviceAssetFile`     |
+  | Alarm manager integration            | `alarmManagerIntegration`          | `alarmManager`        |
+  | Information about application        | `informationAboutApplication`      | `applicationInfo` ¹   |
+  | Access Control (ACL Rules)           | `accessControlAclRules`            | `aclRules`            |
+
+  ¹ Intentionally collides with Network's `Application Info` for
+  cross-surface consistency. Operation IDs are unchanged — this is
+  ONLY about the tag-grouped Proxy accessor name. Code that uses
+  `unifi.local.protect.callOperation('cameraPtzPatrolStart', …)` or
+  the operationId-keyed Proxy form continues to work without
+  modification. 7 new unit tests cover the compaction logic; all 105
+  tests green.
 - `opencode.json` now passes `UNIFI_LOCAL_BASE_URL`,
   `UNIFI_LOCAL_API_KEY`, `UNIFI_LOCAL_INSECURE`, and
   `UNIFI_CLOUD_API_KEY` through to the spawned MCP server via
@@ -273,9 +304,8 @@ find.
   hardware (cloud-Protect already verified)
 - Verify Protect mutation paths (PTZ, disable-mic, alarm-manager webhook)
 - Tag/operationId normalisation for the official Protect spec — its
-  verbose tag names like `"Camera PTZ control & management"` normalise
-  into bulky `cameraPtzControlManagement` namespace identifiers that
-  could be compacted
+  bulky tag-grouped accessors like `cameraPtzControlManagement`
+  could be compacted (resolved in `[Unreleased]` — see "Changed" above)
 - Broaden the bundled Protect fallback beyond the current 18 ops, and/or
   expose binary surfaces (snapshots, RTSPS metadata, files) once the
   sandbox supports them
