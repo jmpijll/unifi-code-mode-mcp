@@ -20,11 +20,29 @@ how to do that effectively.
 | Tool | Purpose | Sandbox kind |
 |---|---|---|
 | `search` | Search the OpenAPI catalogue for operationIds, paths, summaries, parameters. | Sync. Returns a JSON list of operations. |
-| `execute` | Run JavaScript that calls the UniFi APIs through the sandbox. Returns whatever your script's last expression evaluates to. | Async (host calls appear sync). |
+| `execute` | Run JavaScript that calls the UniFi APIs through the sandbox. Returns whatever your script's last expression evaluates to. | QuickJS (synchronous; host calls block from JS's perspective). |
 
 You always start with `search` to find the operationIds you need, then
 `execute` to call them. **Never invent operationIds** — always confirm with
 `search` first; the spec changes per controller version.
+
+### Sandbox JavaScript dialect — quick rules
+
+- **Top-level `return` is not allowed.** The script body is evaluated as a
+  module body, not a function body. Write the result as the last expression
+  statement: `unifi.local.callOperation('getSiteOverviewPage').data.length;`
+- **Top-level `await` is not allowed.** Host calls (`callOperation`,
+  `request`, tag-grouped accessors) block the QuickJS VM until they
+  resolve. Don't write `await unifi.local.callOperation(...)` — write
+  `unifi.local.callOperation(...)` and the value is returned to you
+  synchronously. If you genuinely need `async`/`await` (e.g. to use
+  `Promise.all` over fan-out), wrap the whole script in an async IIFE:
+  `(async () => { … return result; })()` — the IIFE's promise is what
+  the executor awaits and unwraps.
+- **The last expression's value is what `execute` returns to the caller.**
+  Object/array literals, ternary expressions, function calls — anything
+  that evaluates is fine. `console.log` does not affect the return value
+  but its output is captured into the warnings list.
 
 ## 2. Five sandbox surfaces
 

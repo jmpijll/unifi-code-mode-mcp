@@ -39,6 +39,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GET-verify completed cleanly in three sequential `ExecuteExecutor`
   invocations (6 host calls total, ~5 s wall-clock). Sanitized
   transcript at `out/verification/mutation-live-smoke.txt`.
+- **LLM-mediated invocation against the LAN-direct Network surface.**
+  DeepSeek v4 Flash via opencode v1.14.30 drove `unifi.local.*`
+  end-to-end against the same UDM-Pro at 172.27.1.1. The model used
+  `unifi_search` to discover the right operationId
+  (`getSiteOverviewPage`), then `unifi_execute` to call it via
+  `callOperation`, returning site count `1` (matches the
+  discover-local sweep). Self-corrected through 4 syntax attempts
+  using the documented `[unifi.<surface>.<error-class>]` error-shape
+  contract. Sanitized transcript at
+  `out/verification/opencode-deepseek-local-mcp-call.txt`.
+
+### Changed
+
+- `opencode.json` now passes `UNIFI_LOCAL_BASE_URL`,
+  `UNIFI_LOCAL_API_KEY`, `UNIFI_LOCAL_INSECURE`, and
+  `UNIFI_CLOUD_API_KEY` through to the spawned MCP server via
+  opencode's `environment` block with `{env:VAR}` interpolation, so
+  one `opencode run` can drive both LAN-direct and cloud surfaces
+  without rewriting the config.
+- `SKILL.md` and `examples/unifi-expert-agent/SKILL.md` now
+  explicitly call out three sandbox-dialect gotchas surfaced by
+  real-LLM verification: no top-level `return`, no top-level
+  `await`, and the last-expression-as-return-value contract. This
+  should reduce wrong-attempt counts on models that haven't been
+  trained on QuickJS specifics.
 
 ### Discovered
 

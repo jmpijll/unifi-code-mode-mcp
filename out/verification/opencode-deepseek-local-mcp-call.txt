@@ -1,0 +1,233 @@
+================================================================================
+END-TO-END LLM-MEDIATED MCP VERIFICATION (LAN-DIRECT) — DeepSeek v4 Flash via opencode
+Recorded: 2026-05-07 17:52 CEST (15:52 UTC)
+Source: opencode v1.14.30 SQLite session ses_1fcdbf8bfffe0WduZiGZmYs6z1
+================================================================================
+
+WHAT THIS PROVES
+  ✓ A real LLM (DeepSeek v4 Flash via opencode-go) successfully drove
+    the unifi.local.* sandbox surface end-to-end via the unifi_execute
+    MCP tool — not the cloud surface, the LAN-direct path that hits
+    the controller at https://172.27.1.1/proxy/network/integration/v1/...
+    directly.
+  ✓ The MCP server received the LLM-written JavaScript, dispatched
+    it through the QuickJS sandbox, made the host call, and returned
+    the JSON value. The model echoed the result correctly.
+  ✓ The model self-corrected through 4 wrong attempts using the
+    documented tool error shapes:
+      1. SyntaxError "return not in a function" — top-level return
+      2. unifi.local.unknown-operation "No operation 'listSites'" —
+         demonstrates our [unifi.<surface>.<error-class>] error
+         contract surfaces useful information back into the LLM
+      3. SyntaxError "expecting ';'" — top-level await
+      4. SyntaxError "expecting ';'" — same root cause
+    Then succeeded on attempt 5 by wrapping in an async IIFE.
+  ✓ The intermediate unifi_search call worked cleanly (20 ms,
+    returned the right operationId getSiteOverviewPage). Confirms
+    the search→execute loop documented in SKILL.md works as designed
+    when an LLM doesn't know the operationId up-front.
+  ✓ Final result "1" matches the LAN-direct discover-local.ts run on
+    the same UDM-Pro (one site named "Default") — cross-confirms
+    the LLM-mediated path returns identical data to the direct-driven
+    path.
+
+WHAT THIS DOES NOT PROVE
+  ✗ Mutation operations through an LLM. This run was read-only
+    (callOperation('getSiteOverviewPage')).
+  ✗ Other LLM models. We verified DeepSeek v4 Flash; Sonnet 4.6, GPT,
+    Gemini, etc. are still unverified for the LAN-direct surface.
+  ✗ Other client platforms (Claude Desktop, Claude Code, VS Code +
+    Copilot, Codex CLI, Cline, Continue, MCP Inspector) — see
+    examples/unifi-expert-agent/install.md for status.
+
+OPENCODE.JSON (project-scoped) — NEW: env passthrough for local creds
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "unifi": {
+      "type": "local",
+      "command": ["node", "dist/index.js"],
+      "enabled": true,
+      "environment": {
+        "UNIFI_LOCAL_BASE_URL": "{env:UNIFI_LOCAL_BASE_URL}",
+        "UNIFI_LOCAL_API_KEY":  "{env:UNIFI_LOCAL_API_KEY}",
+        "UNIFI_LOCAL_INSECURE": "{env:UNIFI_LOCAL_INSECURE}",
+        "UNIFI_CLOUD_API_KEY":  "{env:UNIFI_CLOUD_API_KEY}"
+      }
+    }
+  },
+  "permission": { "unifi_*": "allow" }
+}
+
+COMMAND
+  $ UNIFI_LOCAL_BASE_URL=https://172.27.1.1 \
+      UNIFI_LOCAL_API_KEY="$(op read 'op://AI Agents/Unifi local api key/password')" \
+      UNIFI_LOCAL_INSECURE=true \
+      opencode --pure run --model opencode-go/deepseek-v4-flash \
+        "Use the unifi_execute MCP tool. Set the code argument to:
+           const sites = unifi.local.callOperation('listSites');
+           return sites.data.length;
+         Then report ONLY the single number that the tool returned, nothing else."
+
+OPENCODE STARTUP LOGS (from share/opencode/log/2026-05-07T154519.log)
+  [INFO] service=mcp key=unifi type=local found
+  [INFO] service=mcp key=unifi mcp stderr: [INFO] UniFi Code-Mode MCP Server starting...
+  [INFO] service=mcp key=unifi mcp stderr: [INFO] Loaded local spec:   UniFi Network Integration API v10.1.84 (67 ops, 12 tags)
+  [INFO] service=mcp key=unifi mcp stderr: [INFO] Loaded Protect spec: UniFi Protect Integration API v0.0.0  (35 ops, 12 tags)
+  [INFO] service=mcp key=unifi mcp stderr: [INFO] Loaded cloud spec:   UniFi Site Manager API (fallback) vfallback-1 (9 ops, 5 tags)
+  [INFO] service=mcp key=unifi mcp stderr: [INFO] MCP server listening on stdio
+  [INFO] service=mcp key=unifi toolCount=2 create() successfully created client
+
+MODEL'S TOOL INVOCATIONS (verbatim, from opencode SQLite session)
+
+  step 1 — reasoning:
+    "The user wants me to call the unifi_execute tool with specific code
+     and then report only the number returned."
+  step 1 — tool unifi_execute:
+    input  : { "code": "const sites = unifi.local.callOperation('listSites');
+                         return sites.data.length;" }
+    output : Error: SyntaxError: return not in a function
+    elapsed: 42 ms, 0 host calls
+
+  step 2 — reasoning:
+    "The error says 'return not in a function'. In the sandbox, the
+     code is evaluated as a script, not as a function body. […] Let
+     me try without the `return` keyword - just use the expression
+     directly."
+  step 2 — tool unifi_execute:
+    input  : { "code": "const sites = unifi.local.callOperation('listSites');
+                         sites.data.length;" }
+    output : --- Warnings ---
+             [warn] [unifi.local] TLS verification disabled (insecure mode).
+                    Provide a custom CA bundle in production.
+             Error: Error: [unifi.local.unknown-operation] No operation
+                    "listSites" in unifi.local spec
+                 at callOperation (prelude.js)
+                 at <eval> (sandbox.js:1)
+    elapsed: 64 ms, 1 host call
+
+  step 3 — reasoning:
+    "The operation 'listSites' doesn't exist. Let me search for the
+     correct operation name."
+  step 3 — tool unifi_search:
+    input  : { "code": "searchOperations('local', 'site', 10);" }
+    output : [
+               {
+                 "operationId": "getSiteOverviewPage",
+                 "method": "GET",
+                 "path": "/v1/sites",
+                 "tag": "sites",
+                 "summary": "List Local Sites",
+                 …
+               }
+               …
+             ]
+    elapsed: 20 ms
+
+  step 4 — reasoning:
+    "The correct operation ID is `getSiteOverviewPage`. Let me use
+     that instead."
+  step 4 — tool unifi_execute:
+    input  : { "code": "const sites =
+                          await unifi.local.callOperation('getSiteOverviewPage');
+                         return sites.data.length;" }
+    output : Error: SyntaxError: expecting ';'
+    elapsed: 40 ms
+
+  step 5 — reasoning:
+    "The sandbox doesn't allow `return` at the top level. Let me use
+     it as an expression instead."
+  step 5 — tool unifi_execute:
+    input  : { "code": "const sites =
+                          await unifi.local.callOperation('getSiteOverviewPage');
+                         sites.data.length;" }
+    output : Error: SyntaxError: expecting ';'
+    elapsed: 38 ms
+
+  step 6 — reasoning:
+    "The sandbox doesn't seem to support `await` without an async
+     function wrapper. Let me try wrapping in an async IIFE […]"
+  step 6 — tool unifi_execute:
+    input  : { "code": "(async () => {
+                          const r = await unifi.local.callOperation('getSiteOverviewPage');
+                          return r.data.length;
+                        })()" }
+    output : --- Warnings ---
+             [warn] [unifi.local] TLS verification disabled (insecure mode).
+                    Provide a custom CA bundle in production.
+
+             1
+
+    elapsed: 123 ms, 1 host call
+
+  step 7 — reasoning:
+    "The result is `1`. I need to report ONLY that number."
+  step 7 — final response to user:
+    "1"
+
+LATENCY / RESOURCE PROFILE
+  opencode bootstrap (cold)            ~7 minutes  (probably plugin
+                                                    init / network)
+  Spec loading inside the MCP server   ~1.2 s    (cold spec cache miss
+                                                  for the cloud fallback;
+                                                  local + Protect cache hits)
+  LLM steps 1–7                        ~12 s    (DeepSeek v4 Flash)
+  Total successful round-trip from
+    user prompt → final "1"            ~13 s    (excluding the 7-min
+                                                  opencode bootstrap)
+  Sandbox host calls                   2        (one for unknown-op
+                                                  attempt, one for
+                                                  successful getSiteOverviewPage)
+
+NOTABLE LESSONS FOR DOCS
+  * SKILL.md §1 says the execute sandbox is "Async (host calls appear
+    sync)". Both Sonnet 4.6 (in earlier verifications) and DeepSeek
+    v4 Flash interpret "appear sync" inconsistently — DeepSeek tried
+    top-level `await` THREE times before figuring out the IIFE
+    pattern. Consider explicitly stating in SKILL.md and in the
+    `execute` tool description that:
+       - top-level return is NOT allowed (use an expression statement)
+       - top-level await is NOT allowed (host calls already block
+         synchronously inside QuickJS — no await needed)
+       - the LAST expression's value is what's returned to the caller
+    This won't catch every model but should reduce the wrong-attempt
+    count materially.
+
+  * The unifi.<surface>.unknown-operation error class works as
+    designed — DeepSeek read "No operation 'listSites'" and
+    immediately knew to call unifi_search. This validates the
+    [unifi.<surface>.<error-class>] error-shape contract documented
+    in AGENTS.md §6 from a real-LLM perspective.
+
+  * opencode startup time on a cold cache (no pre-existing process
+    pool) is ~7 minutes for the FIRST `opencode run` invocation. This
+    is opencode-internal (plugin init, project scan, snapshot), not
+    related to our MCP server. Subsequent runs in the same session
+    are fast (<2 s startup).
+
+PROBE METADATA
+  Controller:    UDM-Pro on UniFi OS, Network application 10.3.58
+                 (LAN-direct, 172.27.1.1)
+  Surface:       unifi.local.* (NOT unifi.cloud.*)
+  Spec:          UniFi Network Integration API v10.1.84 (67 ops),
+                 loaded from apidoc-cdn.ui.com on cache miss; cache
+                 hit on this run
+  Model:         opencode-go/deepseek-v4-flash (via Cursor's
+                 opencode-go bundled provider)
+  Client:        opencode v1.14.30, project-scoped opencode.json,
+                 --pure run (single-shot, no TUI)
+  TLS:           UNIFI_LOCAL_INSECURE=true (UDM self-signed)
+
+REPRODUCER
+  $ # in the project root, after npm run build:
+  $ UNIFI_LOCAL_BASE_URL=https://172.27.1.1 \
+      UNIFI_LOCAL_API_KEY="$(op read 'op://AI Agents/Unifi local api key/password')" \
+      UNIFI_LOCAL_INSECURE=true \
+      opencode --pure run --model opencode-go/deepseek-v4-flash \
+        "Use the unifi_execute MCP tool. Set the code argument to:
+           (async () => {
+             const r = await unifi.local.callOperation('getSiteOverviewPage');
+             return r.data.length;
+           })()
+         Then report ONLY the single number that the tool returned, nothing else."
+================================================================================
