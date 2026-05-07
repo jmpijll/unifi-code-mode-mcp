@@ -185,6 +185,29 @@ cursor-agent --print --output-format json --approve-mcps --force \
   | tee out/cursor-smoke.json
 ```
 
+For a more thorough run (three prompts: HLD sweep, single-fact lookup,
+intentionally-impossible) use the helper script in this repo:
+
+```bash
+./scripts/cursor-cli-smoke.sh
+```
+
+It builds the server, generates a temporary `.cursor/mcp.json`, drives
+the three prompts, and writes JSON transcripts to `out/cursor-smoke-*.json`.
+The script no-ops gracefully if `cursor-agent` is not on `PATH`.
+
+If you only need to verify the protocol-level behaviour (not the IDE
+client), the project's Vitest integration suite does exactly that
+without depending on the CLI:
+
+```bash
+npm test -- src/__tests__/integration
+```
+
+It spins up the real `createMcpServer` factory against a mock UniFi
+controller and exercises both `InMemoryTransport` (stdio-equivalent) and
+Streamable HTTP transports.
+
 Expected JSON output (shape, not values):
 
 ```json
