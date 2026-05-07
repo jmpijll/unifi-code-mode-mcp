@@ -14,7 +14,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').mkdirSync('dist/spec',{recursive:true});require('fs').copyFileSync('src/spec/cloud-fallback.json','dist/spec/cloud-fallback.json')\"",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "lint": "eslint src/ scripts/ cf-worker/ --ext .ts",

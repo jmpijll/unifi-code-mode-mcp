@@ -20,7 +20,9 @@ npm-debug.log*
 
 src/spec/cache/
 
-.cursor/
+.cursor/*
+!.cursor/mcp.json
+!.cursor/cli.json
 
 out/
 
