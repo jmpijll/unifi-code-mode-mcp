@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# Developer-local smoke test that drives the MCP server through the real
-# `cursor-agent` CLI, exactly as a Cursor IDE / CLI session would.
+# Smoke test that drives the MCP server through the real `cursor-agent` CLI.
 #
-# This script is NOT run in CI — the Vitest integration suite covers the
-# protocol layer without depending on cursor-agent. Use this when you want
-# to validate the full IDE-shaped path on your machine.
+# This is NOT run in CI — the Vitest integration suite covers the protocol
+# layer without depending on cursor-agent. Use this script when you want
+# to validate the IDE/CLI client wiring on your machine.
+#
+# Layers:
+#   1. mcp list                  — confirm the server appears.
+#   2. mcp list-tools unifi      — confirm both tools are exposed (no LLM auth needed).
+#   3. (optional) --print prompt — drive an LLM-mediated call.
+#                                  See docs/cursor-skill.md for the known-issue
+#                                  caveat about --print mode and custom MCPs.
 #
 # Prerequisites:
-#   1. cursor-agent on PATH:
-#        curl https://cursor.com/install -fsS | bash
-#      (or follow https://cursor.com/docs/cli for the latest install URL)
-#   2. Either UNIFI_LOCAL_* or UNIFI_CLOUD_* env vars exported in your shell.
-#
-# What it does:
-#   1. Builds the server (npm run build).
-#   2. Generates a temporary .cursor/mcp.json that registers the server.
-#   3. Runs three fixed prompts via `cursor-agent --print --output-format json`,
-#      captures the JSON, and saves transcripts under out/.
-#   4. Prints a brief pass/fail summary based on the presence of expected
-#      tool calls and the absence of `isError: true`.
+#   - cursor-agent on PATH (https://cursor.com/docs/cli)
+#   - This repo built (`npm run build`)
+#   - Either:
+#       a) UNIFI_LOCAL_API_KEY + UNIFI_LOCAL_BASE_URL exported in the shell, OR
+#       b) UNIFI_CLOUD_API_KEY exported, OR
+#       c) Nothing — the server still starts; only the cloud-fallback spec is loaded.
 
 set -euo pipefail
 
@@ -27,59 +27,67 @@ cd "$ROOT"
 
 if ! command -v cursor-agent >/dev/null 2>&1; then
   cat >&2 <<EOF
-[smoke] cursor-agent not found on PATH. Install it from https://cursor.com/docs/cli
-[smoke] (or skip this script — the Vitest integration suite covers the protocol layer.)
+[smoke] cursor-agent not found on PATH.
+
+  Install:  curl https://cursor.com/install -fsS | bash
+  Or skip:  the Vitest integration suite (npm test) covers the protocol layer
+            without depending on the CLI.
 EOF
   exit 2
 fi
 
 echo "[smoke] cursor-agent: $(cursor-agent --version 2>&1 | head -n 1)"
-echo "[smoke] building server …"
-npm run build >/dev/null
+
+if [[ ! -f "$ROOT/dist/index.js" ]]; then
+  echo "[smoke] dist/ missing — running 'npm run build' …"
+  npm run build >/dev/null
+fi
+
+if [[ ! -f "$ROOT/.cursor/mcp.json" ]]; then
+  echo "[smoke] .cursor/mcp.json missing — this repo ships one. Did you delete it?" >&2
+  exit 1
+fi
+
+echo
+echo "[smoke] [1/3] enabling + listing the server …"
+cursor-agent mcp enable unifi
+echo
+cursor-agent mcp list | grep -E "^unifi" || {
+  echo "[smoke] FAIL — server not listed" >&2
+  exit 1
+}
+
+echo
+echo "[smoke] [2/3] listing the server's tools (no LLM auth required) …"
+TOOLS_OUT="$(cursor-agent mcp list-tools unifi)"
+echo "$TOOLS_OUT"
+if ! echo "$TOOLS_OUT" | grep -q "search" || ! echo "$TOOLS_OUT" | grep -q "execute"; then
+  echo "[smoke] FAIL — expected both 'search' and 'execute' tools" >&2
+  exit 1
+fi
+echo "[smoke] [2/3] ok — both tools registered."
+
+echo
+echo "[smoke] [3/3] (optional) LLM-mediated --print invocation …"
+if ! cursor-agent status 2>&1 | grep -q "Logged in"; then
+  echo "[smoke] not logged in — skipping LLM smoke. Run 'cursor-agent login' to enable."
+  exit 0
+fi
 
 mkdir -p "$ROOT/out"
-SCOPE_DIR="$(mktemp -d)"
-trap 'rm -rf "$SCOPE_DIR"' EXIT
-mkdir -p "$SCOPE_DIR/.cursor"
+TS="$(date +%Y%m%d-%H%M%S)"
+OUT="$ROOT/out/cursor-smoke-${TS}.json"
 
-cat > "$SCOPE_DIR/.cursor/mcp.json" <<JSON
-{
-  "mcpServers": {
-    "unifi": {
-      "command": "node",
-      "args": ["$ROOT/dist/index.js"],
-      "env": {
-        "UNIFI_LOCAL_API_KEY": "\${env:UNIFI_LOCAL_API_KEY}",
-        "UNIFI_LOCAL_BASE_URL": "\${env:UNIFI_LOCAL_BASE_URL}",
-        "UNIFI_LOCAL_INSECURE": "\${env:UNIFI_LOCAL_INSECURE}",
-        "UNIFI_CLOUD_API_KEY": "\${env:UNIFI_CLOUD_API_KEY}"
-      }
-    }
-  }
-}
-JSON
+# NOTE: in current cursor-agent versions, --print mode with composer-2-fast
+# does not register custom MCP servers as model-callable tools. The model may
+# answer correctly by spawning the server over stdio itself. This is documented
+# in docs/cursor-skill.md §8 ("Known limitations specific to Cursor").
+cursor-agent --print --output-format json --approve-mcps --force --trust \
+  "Call the search tool of the 'unifi' MCP server with code='spec.cloud ? spec.cloud.operations.length : 0'. Return ONLY the tool's text output. Do not invent." \
+  > "$OUT" 2>"$OUT.stderr" || true
 
-run_prompt() {
-  local label="$1"
-  local prompt="$2"
-  local out="$ROOT/out/cursor-smoke-${label}.json"
-  echo "[smoke] [$label] running …"
-  if cursor-agent \
-      --workspace "$SCOPE_DIR" \
-      --print \
-      --output-format json \
-      --approve-mcps \
-      --force \
-      "$prompt" > "$out" 2>"$out.stderr"; then
-    echo "[smoke] [$label] saved $out"
-  else
-    echo "[smoke] [$label] FAILED — see $out.stderr"
-    return 1
-  fi
-}
-
-run_prompt hld     "Use the unifi MCP. Call the search tool with the query 'site' and then the execute tool to list every site you can see along with the device count for each. Return a markdown table — nothing else."
-run_prompt fact    "Use the unifi MCP. Find the operationId you would call to list Wi-Fi broadcasts, run it for any site, and return ONLY the SSID names as a JSON array."
-run_prompt impossible "Use the unifi MCP. Try to call the operationId 'totallyMadeUpOperation' and report exactly what error you receive. Do not retry; just describe the error message."
-
-echo "[smoke] all prompts done. Inspect out/cursor-smoke-*.json for full transcripts."
+echo "[smoke] LLM result saved to $OUT"
+RESULT="$(jq -r '.result // empty' < "$OUT" 2>/dev/null)"
+if [[ -n "$RESULT" ]]; then
+  echo "[smoke] result: $RESULT" | head -3
+fi

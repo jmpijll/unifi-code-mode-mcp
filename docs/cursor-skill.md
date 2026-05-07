@@ -21,25 +21,34 @@ project entry wins.
 
 ## 2. Recommended: stdio entry (single tenant, IDE)
 
-Most users want a single deployment per Cursor profile. Put this in
-`~/.cursor/mcp.json` (global) or `<repo>/.cursor/mcp.json` (project):
+Most users want a single deployment per Cursor profile. This repo ships a
+working project-scoped `.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "unifi": {
       "command": "node",
-      "args": [
-        "${workspaceFolder}/dist/index.js"
-      ],
+      "args": ["dist/index.js"],
       "env": {
-        "UNIFI_CLOUD_API_KEY": "${env:UNIFI_CLOUD_API_KEY}"
-      },
-      "envFile": "${workspaceFolder}/.env"
+        "MCP_TRANSPORT": "stdio",
+        "UNIFI_LOCAL_API_KEY": "${env:UNIFI_LOCAL_API_KEY}",
+        "UNIFI_LOCAL_BASE_URL": "${env:UNIFI_LOCAL_BASE_URL}",
+        "UNIFI_LOCAL_INSECURE": "${env:UNIFI_LOCAL_INSECURE}",
+        "UNIFI_CLOUD_API_KEY": "${env:UNIFI_CLOUD_API_KEY}",
+        "UNIFI_CLOUD_BASE_URL": "${env:UNIFI_CLOUD_BASE_URL}"
+      }
     }
   }
 }
 ```
+
+> **Path note**: We use a workspace-relative path (`dist/index.js`) rather
+> than `${workspaceFolder}/dist/index.js`. The
+> `cursor-agent mcp list-tools <name>` subcommand does not expand
+> `${workspaceFolder}`, which causes it to spawn `node /dist/index.js`
+> and fail with `Connection closed`. Relative paths work in both the
+> IDE and all `cursor-agent` subcommands.
 
 Or, if you `npm link` the server globally so the binary is on `PATH`:
 
@@ -249,6 +258,50 @@ If the smoke fails, check in this order:
 - **`cursor-agent --force` bypasses the per-tool approval prompt.** Use
   it in CI; avoid it in interactive sessions where you want a human
   approval gate on mutating UniFi calls.
+- **`${workspaceFolder}` is not always interpolated.** The
+  `cursor-agent mcp list-tools <name>` subcommand specifically does not
+  expand it (the server fails to spawn with `Connection closed`). Use a
+  workspace-relative path like `"args": ["dist/index.js"]` instead — it
+  works for both the IDE and the CLI subcommands. Verified against
+  cursor-agent v2026.05.05.
+- **`cursor-agent --print` mode + custom MCPs.** With the default
+  `composer-2-fast` model, custom MCP servers configured in
+  `.cursor/mcp.json` are *not* registered as model-callable tools in
+  the headless `--print` session, even when
+  `cursor-agent mcp list` shows the server as `ready` and
+  `--approve-mcps --force --trust` are all set. The model knows the
+  server exists (it can see `dist/index.js` in the workspace) but its
+  tool list contains only `codebase_search`, `run_terminal_cmd`,
+  `grep`, `read_file`, etc. — no `mcp__<server>__<tool>` entry. The
+  model often works around this by spawning the MCP server over stdio
+  and driving JSON-RPC manually via `run_terminal_cmd`, which produces
+  correct results but is unreliable and consumes call budget. Verified
+  against cursor-agent v2026.05.05.
+
+  **Reliable smoke**: use `cursor-agent mcp list-tools <name>` to
+  confirm protocol-level wiring (no LLM session needed). For
+  functional behaviour use the project's Vitest integration suite —
+  it speaks the same MCP wire protocol via `InMemoryTransport` /
+  `StreamableHTTPClientTransport`.
+
+  **Permissions tip** (for interactive `cursor-agent` sessions, where
+  custom MCPs *do* register): if the global
+  `~/.cursor/cli-config.json` uses `"approvalMode": "allowlist"`,
+  add a project-scoped `.cursor/cli.json` to pre-allow this server's
+  tools without prompting:
+
+  ```json
+  {
+    "permissions": {
+      "allow": [
+        "Mcp(unifi:search)",
+        "Mcp(unifi:execute)"
+      ]
+    }
+  }
+  ```
+
+  This file is checked into the repo for reference.
 
 ## 9. Reference
 
