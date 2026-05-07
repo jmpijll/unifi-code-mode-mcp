@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta.2] — 2026-05-07
+
+**Public-flip release.** Closes the homelab-doable verification gaps
+identified in the 0.2.0-beta.1 verification status, hardens CI for the
+public flip (Node 20+22 matrix, format check, post-build dist smoke),
+and adds Dependabot for npm + GitHub Actions. Repo visibility is
+flipped from private to public in this version. `package.json` stays
+`"private": true` — npm publish is reserved for `1.0.0`.
+
 ### Added
 
 - `scripts/discover-local.ts` — read-only discovery script for the
@@ -21,6 +30,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not DISCONNECTED, refuses if name already matches a stale-test
   pattern, runs revert in a separate `ExecuteExecutor` invocation
   with fatal exit codes if revert fails.
+- `scripts/verify-mutations-rtsps.ts` — second mutation round-trip
+  template, this time DELETE+POST against
+  `/v1/cameras/{id}/rtsps-stream`. Tears down the camera's `high`
+  RTSPS stream, GET-verifies it's gone, POST-recreates with
+  `{qualities:['high']}` body, GET-verifies it's back (with rotated
+  token). Same self-reverting-on-DISCONNECTED-only pattern as the
+  rename script.
+- `scripts/protect-probe.ts` — read-only diagnostic that surfaces
+  per-camera feature flags + current rtsps-stream state, used as a
+  precondition gate when adapting the mutation scripts to a
+  contributor's hardware.
+- `.github/dependabot.yml` — weekly npm + monthly github-actions
+  updates, max 5 open PRs per ecosystem.
+- `scripts/post-flip-repo-settings.sh` — idempotent script applying
+  branch protection (`main` requires PR review + both Node 20.x and
+  22.x build statuses, linear history, conversation resolution),
+  topics, discussions, private vulnerability reporting via the
+  `gh` CLI. Run once after the visibility flip.
+
+### Changed
+
+- **CI matrix bumped to Node 20.x + 22.x** with `fail-fast: false`,
+  added a non-blocking `npm run format:check` step, and added a
+  post-build smoke that drives `dist/index.js` through MCP Inspector
+  CLI v0.20.0 to confirm both `search` and `execute` are exposed.
+  This closes the "we ship a binary but only test it through Vitest"
+  gap.
+
+### Verified live (new vs 0.2.0-beta.1)
+
+- **LLM-mediated invocation against `unifi.local.protect.*`.**
+  DeepSeek v4 Flash via opencode `--pure run` drove
+  `unifi_execute({code: "(async () => { … listCameras … })()"})`
+  end-to-end; server returned the live camera array (4 cameras
+  matching `discover-local.ts` and the cloud-Protect run). Sanitized
+  transcript at
+  `out/verification/opencode-deepseek-local-protect-mcp-call.txt`.
+- **Second Protect mutation round-trip — RTSPS stream toggle**
+  (`DELETE` qualities=high → re-create with `{qualities:['high']}`).
+  Confirms the self-reverting pattern works for non-PATCH operations
+  and that `buildQueryString()` correctly serialises array query
+  params. Sanitized transcript at
+  `out/verification/mutation-rtsps-live-smoke.txt`.
+- **MCP Inspector UI mode (browser).** Pinned at
+  `@modelcontextprotocol/inspector@0.20.0`. Connect → List Tools →
+  select `execute` → paste `getSiteOverviewPage` one-liner → Run Tool
+  returned `Tool Result: Success` with the live site count. History
+  pane recorded `initialize` → `tools/list` → `tools/call`. Sanitized
+  transcript + two screenshots at
+  `out/verification/mcp-inspector-ui-*`.
+- **Cloudflare Workers entry — `wrangler dev` parity smoke.** The
+  Worker boots on Miniflare (`Ready on http://localhost:8787`), and
+  `/health`, `/mcp` (with and without creds), and 404 routing all
+  match the documented contract. The MCP transport adapter remains a
+  scaffold returning 501 (per `cf-worker/README.md`), the
+  `worker_loaders` binding requires wrangler v4 and is not yet
+  exercised. Sanitized transcript at
+  `out/verification/cf-worker-parity-smoke.txt`.
+- **Claude Code CLI v2.0.47 — MCP register + connect handshake.**
+  `claude mcp add unifi --transport stdio …` followed by
+  `claude mcp list` returns `✓ Connected`, `claude mcp get unifi`
+  returns the full descriptor with `Status: ✓ Connected`. The MCP
+  protocol layer works against this 4th-party client. End-to-end
+  LLM-mediated invocation through `claude --print` is blocked by
+  Claude Code's own auth requirement (no `ANTHROPIC_API_KEY` /
+  interactive login in this environment) — documented as a tester
+  recipe rather than an MCP gap. Sanitized transcript at
+  `out/verification/claude-code-cli-mcp-handshake.txt`.
+
+### Discovered (new vs 0.2.0-beta.1)
+
+- **PTZ goto + return-to-home is homelab-blocked.** None of the four
+  cameras in the maintainer's homelab is PTZ-capable
+  (`featurePtz === false` on all four; no `canPtz` feature flag in
+  any of their featureFlags dictionaries). PTZ verification is
+  deferred to a contributor with PTZ hardware (e.g. UniFi G4 PTZ).
+- **Alarm-manager webhook trigger is homelab-blocked.** Triggering
+  `POST /v1/alarm-manager/webhook/{id}` requires an alarm to be
+  pre-configured in the Protect UI with the matching ID. The homelab
+  has no such alarm configured, so the operation is a no-op against
+  the controller. Verification deferred to a contributor running an
+  alarm-managed Protect deployment.
+- **Wrangler v3.114.17 cannot wire `worker_loaders`.** Required for
+  `DynamicWorkerExecutor`'s `LOADER` binding, the `worker_loaders`
+  field in `cf-worker/wrangler.toml` is rejected as "unexpected
+  fields" by the bundled wrangler v3. v4.90.0 supports it. Bumping
+  wrangler to v4 needs a separate config-schema migration PR.
+
+### Sanitization
+
+- `out/verification/cursor-agent-sonnet-mcp-call.txt` line 20: replaced
+  the absolute home-directory path with `/path/to/unifi-code-mode-mcp`.
+- New `out/verification/README.md` documents the
+  always-redacted vs intentionally-kept policy: API keys, auth tokens,
+  and absolute home paths are scrubbed; RFC1918 LAN IPs (`172.27.1.1`),
+  camera names, site name, and stale RTSPS tokens are kept verbatim
+  to make transcripts easier to reproduce against your own controller.
+
+### Repository visibility
+
+- **`gh repo edit jmpijll/unifi-code-mode-mcp --visibility public`**
+  on this tag. Run `bash scripts/post-flip-repo-settings.sh` after
+  the flip to apply topics, branch protection, and private
+  vulnerability reporting. The README "Project status" callout
+  ("public beta") was already true in copy; this version makes it
+  true in fact.
 
 ### Verified live
 
@@ -374,5 +489,6 @@ find.
 - Broader client validation — confirmed working configs for Claude
   Desktop, Continue, Cline, Aider, Zed, and the MCP Inspector UI
 
-[Unreleased]: https://github.com/jmpijll/unifi-code-mode-mcp/compare/v0.2.0-beta.1...HEAD
+[Unreleased]: https://github.com/jmpijll/unifi-code-mode-mcp/compare/v0.2.0-beta.2...HEAD
+[0.2.0-beta.2]: https://github.com/jmpijll/unifi-code-mode-mcp/compare/v0.2.0-beta.1...v0.2.0-beta.2
 [0.2.0-beta.1]: https://github.com/jmpijll/unifi-code-mode-mcp/releases/tag/v0.2.0-beta.1

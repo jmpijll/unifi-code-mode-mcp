@@ -17,7 +17,7 @@ raw frame-buffered transcript):
   10020  Globbed "**/.cursor/mcp.json" in .
   10021  Read .cursor/mcp.json
 
-  13044  $ cd /Users/jamievanderpijll/unify-mcp && echo
+  13044  $ cd /path/to/unifi-code-mode-mcp && echo
   13045    '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":
   13046    "search","arguments":{"code":"spec.cloud.operations.length"}}}' |
   13047    node dist/index.js 2>/dev/null   2.1s

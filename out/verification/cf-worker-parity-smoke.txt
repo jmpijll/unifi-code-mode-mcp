@@ -1,0 +1,141 @@
+================================================================================
+CLOUDFLARE WORKER PARITY SMOKE — wrangler dev (local Miniflare)
+Recorded: 2026-05-07 21:10 CEST (19:10 UTC)
+Tool:     wrangler v3.114.17 (bundled in devDeps; v4.90.0 is current)
+Server:   cf-worker/index.ts (Cloudflare Workers entry, "local" namespace)
+================================================================================
+
+WHAT THIS PROVES
+  ✓ The Worker entry boots cleanly under `wrangler dev` (Miniflare
+    simulation): `Ready on http://localhost:8787`.
+  ✓ /health responds with the documented JSON shape:
+        {"status":"ok","namespace":"local"}
+  ✓ /mcp without credential headers responds 401 with the
+    documented message:
+        "Missing X-Unifi-Local-Api-Key / X-Unifi-Local-Base-Url
+         headers (or DEFAULT_LOCAL_* env)."
+    This proves the per-request multi-tenant header contract is
+    correctly enforced on the Worker entry — same contract as the
+    Node Streamable HTTP transport.
+  ✓ /mcp with stub credentials (X-Unifi-Local-Api-Key + base URL)
+    proceeds past auth and reaches the spec-loader stage, which
+    then 502s ("Failed to load spec") because the stub base URL
+    isn't a real controller. Confirms `loadSpec()` actually runs
+    against the supplied creds.
+  ✓ Unknown paths return 404 with the documented "Not found" body.
+
+WHAT THIS DOES NOT PROVE  (and why)
+  ✗ End-to-end MCP tool dispatch through the Worker. The transport
+    adapter `adaptToFetch` in cf-worker/index.ts is **explicitly a
+    scaffold** that returns 501 ("Cloudflare Workers transport
+    adapter is a scaffold..."). This is documented in
+    [cf-worker/README.md](../../cf-worker/README.md):
+       > Status: Scaffold. The MCP server, spec loader, and host
+       > request() function are wired up. The HTTP-to-MCP transport
+       > adapter is intentionally a stub and returns 501.
+    Reaching the 501 branch in this smoke would require valid creds
+    + a reachable controller; we did not exercise that branch here
+    because doing so against the homelab UDM-Pro at 172.27.1.1
+    would also need TLS-skip support (which Workers cannot provide
+    — it's documented as rejected in cf-worker/index.ts).
+  ✗ The DynamicWorkerExecutor (Worker Loader) sandbox. wrangler
+    v3.114.17 (bundled) does NOT recognise the `worker_loaders`
+    field in wrangler.toml, so the LOADER binding is not wired in
+    this run. Upgrading to wrangler v4.90.0 would expose the
+    binding (per the deprecation warning the bundled wrangler
+    prints). This is on the roadmap.
+  ✗ TLS-skip mode against a self-signed homelab controller.
+    Workers' fetch validates TLS unconditionally; cf-worker/index.ts
+    explicitly throws "X-Unifi-Local-Insecure is not supported on
+    Cloudflare Workers" when the header is set. This is the
+    correct, documented behaviour — and is why the cf-worker is
+    primarily intended as a hosted multi-tenant gateway in front
+    of publicly-trusted controllers, not as a homelab tool.
+  ✗ A deployed Worker. We only tested local Miniflare; a real
+    `wrangler deploy` against Cloudflare would require a
+    paid-tier account with the Worker Loader rollout flag.
+
+VERBATIM TERMINAL TRANSCRIPT (cred values redacted)
+
+  $ npm run cf:dev
+  > unifi-code-mode-mcp@0.2.0-beta.1 cf:dev
+  > wrangler dev --config cf-worker/wrangler.toml
+
+   ⛅️ wrangler 3.114.17 (update available 4.90.0)
+  -----------------------------------------------
+  ▲ [WARNING] The version of Wrangler you are using is now out-of-date.
+       Please update to the latest version to prevent critical errors.
+  ▲ [WARNING] Processing cf-worker/wrangler.toml configuration:
+       - Unexpected fields found in top-level field: "worker_loaders"
+
+  Your Worker and resources are simulated locally via Miniflare.
+  Your worker has access to the following bindings:
+    - Vars:
+        - NAMESPACE: "local"
+  ⎔ Starting local server...
+  [wrangler-UserWorker:wrn] The latest compatibility date supported by
+    the installed Cloudflare Workers Runtime is "2025-07-18", but you've
+    requested "2026-01-01". Falling back to "2025-07-18"...
+  [wrangler:inf] Ready on http://localhost:8787
+
+  $ curl -s http://localhost:8787/health
+  {"status":"ok","namespace":"local"}
+
+  $ curl -s -X POST http://localhost:8787/mcp \
+      -H 'Content-Type: application/json' \
+      -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' \
+      -w '\nHTTP: %{http_code}\n'
+  {"error":"Missing X-Unifi-Local-Api-Key / X-Unifi-Local-Base-Url headers
+   (or DEFAULT_LOCAL_* env)."}
+  HTTP: 401
+
+  $ curl -s -X POST http://localhost:8787/mcp \
+      -H 'Content-Type: application/json' \
+      -H 'X-Unifi-Local-Api-Key: <stub>' \
+      -H 'X-Unifi-Local-Base-Url: https://<stub>' \
+      -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' \
+      -w '\nHTTP: %{http_code}\n'
+  {"error":"Failed to load spec: internal error; reference = ..."}
+  HTTP: 502
+
+  $ curl -s http://localhost:8787/foo -w '\nHTTP: %{http_code}\n'
+  Not found
+  HTTP: 404
+
+GAPS TRACKED IN ROADMAP
+  - Upgrade `wrangler` from v3.114.17 → v4.90.0 to enable the
+    `worker_loaders` binding for `LOADER`. (One-line bump in
+    `package.json` devDependencies; deferred to its own PR because
+    wrangler v4 has a config schema migration the
+    [`cf-worker/wrangler.toml`](../../cf-worker/wrangler.toml)
+    will need.)
+  - Implement the `adaptToFetch` shim once either (a) the MCP
+    TypeScript SDK ships a Web-Streams transport, or (b) we land a
+    Node-IncomingMessage-over-Web-Request shim. Tracked upstream;
+    the cf-worker README links the upstream issue.
+  - Hosted multi-tenant Worker deployment behind a public hostname,
+    documented end-to-end with a `wrangler deploy` + sample MCP
+    client config.
+
+PROBE METADATA
+  Wrangler:    3.114.17 (bundled in devDeps); v4.90.0 is current
+  Compat date: 2026-01-01 requested → 2025-07-18 served (wrangler 3
+               is too old for our requested date; non-fatal warning)
+  Bindings:    Vars only (LOADER omitted because worker_loaders is
+               not parsed by wrangler v3)
+  Surface:     namespace="local" per wrangler.toml [vars]
+  TLS:         Workers fetch — strict, no skip available
+
+REPRODUCER (matches what was verified above)
+  $ # in the project root, after npm install:
+  $ npm run cf:dev
+  $ # in another shell, while wrangler dev is running:
+  $ curl http://localhost:8787/health
+  $ curl -X POST http://localhost:8787/mcp \
+      -H 'Content-Type: application/json' \
+      -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+  # Expect: 401 (no creds), or 502 (creds set, but base URL not
+  # serving a UniFi Network Integration spec). Reaching the 501
+  # transport-adapter response requires real creds + reachable
+  # controller AND wrangler v4 + worker_loaders rollout.
+================================================================================
