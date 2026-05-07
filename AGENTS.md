@@ -47,17 +47,20 @@ backed by a sandboxed JS surface that fans out to two separate UniFi APIs.
      **cloud** API key. No local creds needed.
    - `unifi.local.protect.*` → local controller's Protect Integration API
      at `/proxy/protect/integration/v1/...`. Uses the **local** API key.
-     The Protect spec ships as a curated ~25-op fallback at
-     `src/spec/protect-fallback.json`; broader specs can be supplied via
-     `UNIFI_PROTECT_SPEC_URL`. **Verified against the mock controller
-     only** — no real-Protect end-to-end yet.
+     The loader auto-fetches Ubiquiti's official spec at
+     `apidoc-cdn.ui.com/protect/v<version>/integration.json` (confirmed
+     v7.0.107, v7.0.94); when offline, falls back to the bundled curated
+     `src/spec/protect-fallback.json` (~18 JSON-over-HTTP ops). Override
+     with `UNIFI_PROTECT_SPEC_URL`. **Verified against the mock controller
+     only** — no live-Protect end-to-end yet.
    - `unifi.cloud.protect(consoleId).*` → Protect Integration API tunneled
      through the Site Manager connector at
-     `/v1/connector/consoles/{id}/proxy/protect/integration`.
-     **UNVERIFIED** — Ubiquiti has not publicly documented that the
-     connector proxies Protect. Shipped on the assumption it follows the
-     Network connector's pattern; if that assumption breaks, calls return
-     a structured `[unifi.cloud.protect.http]` 404.
+     `/v1/connector/consoles/{id}/proxy/protect/integration`. The URL
+     pattern is officially documented by Ubiquiti
+     (`developer.ui.com/protect/v7.0.107/...` exposes a "Remote" / "Local"
+     base-URL selector mapping every operation to exactly these paths).
+     Mock-verified end-to-end; live verification against a Protect-enabled
+     console pending.
 3. **Credentials never enter the sandbox.** They live on the host and are
    looked up from `TenantContext` when the host-side `request()` runs. The
    sandbox sees an opaque `client` handle, never an `apiKey`.

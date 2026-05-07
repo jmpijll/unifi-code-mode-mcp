@@ -16,8 +16,8 @@ The UniFi Network Integration API has **70+ endpoints**. Exposing each as a sepa
   - `unifi.local.*` — direct Network Integration API on a controller you can reach over the LAN
   - `unifi.cloud.*` — Site Manager native endpoints (Hosts, Sites, Devices, ISP Metrics, SD-WAN)
   - `unifi.cloud.network(consoleId).*` — full Network Integration API, **proxied through `api.ui.com`** so a single Site Manager API key drives any console without exposing the controller publicly
-  - `unifi.local.protect.*` — UniFi Protect Integration API (cameras, NVRs, sensors, lights, alarm hubs, sirens, viewers, live-views, users) — **bundled spec is curated to ~25 ops; verified against the mock controller, not a real Protect deployment**
-  - `unifi.cloud.protect(consoleId).*` — Protect Integration API tunneled through the Site Manager connector. **Unverified** against a real Protect-enabled console; structurally analogous to `cloud.network`
+  - `unifi.local.protect.*` — UniFi Protect Integration API (cameras + PTZ, NVRs, sensors, lights, chimes, viewers, live-views) — official spec auto-loaded from `apidoc-cdn.ui.com/protect/v<version>/integration.json`; bundled curated fallback ships ~18 JSON-over-HTTP ops for offline use
+  - `unifi.cloud.protect(consoleId).*` — Protect Integration API tunneled through the Site Manager connector at `/v1/connector/consoles/{id}/proxy/protect/integration`. URL pattern is officially documented by Ubiquiti (`developer.ui.com/protect/v7.0.107/...`, "Remote" base-URL selector)
 - **Single-user (env) and multi-user (per-request HTTP headers)** — the same server runs as a private homelab tool or a hosted multi-tenant gateway
 - **QuickJS WASM sandbox** — memory, CPU, time, and call-budget limits; credentials never enter the sandbox
 - **Dynamic OpenAPI loading** — the controller's app version is auto-discovered (`GET /v1/info`); the spec is fetched from `apidoc-cdn.ui.com` and cached on disk
@@ -125,8 +125,7 @@ What is **not yet verified** (and where help is welcome):
 - Long-running soak / stability under sustained load.
 - Real UniFi networks other than the one author's homelab — we cannot generalise resilience claims from a single network.
 - More than one model on each verified client (only one model per client has been driven end-to-end so far — Sonnet 4.6 on cursor-agent, DeepSeek v4 Flash on opencode).
-- **Protect against a real, Protect-enabled UniFi OS device.** The bundled curated fallback spec was hand-written from publicly observable controller behaviour; we have not yet run it against a live `/proxy/protect/integration/*`.
-- **Protect via the cloud connector** (`unifi.cloud.protect(consoleId).*`). Ubiquiti has not publicly documented that the Site Manager connector at `api.ui.com` proxies Protect — we expose it on the assumption it follows the Network connector's pattern. If the connector turns out to be Network-only, calls will fail with a structured `[unifi.cloud.protect.http]` error.
+- **Protect against a real, Protect-enabled UniFi OS device.** Both the local path (`/proxy/protect/integration/*`) and the cloud-connector path (`api.ui.com/v1/connector/consoles/{id}/proxy/protect/integration/*`) are officially documented by Ubiquiti at `developer.ui.com/protect/v7.0.107/gettingstarted` (with a "Remote" / "Local" base-URL selector), and the loader auto-fetches the official `apidoc-cdn.ui.com/protect/v<version>/integration.json` for both v7.0.107 and v7.0.94. We have **not yet** exercised either path against a live Protect controller — only against the in-process mock harness — so live HTTP behaviour, edge cases (e.g. PTZ commands), and binary surfaces (snapshots, RTSPS streams, talk-back) are still unproven.
 
 Two client-specific subtleties worth calling out:
 
@@ -135,8 +134,8 @@ Two client-specific subtleties worth calling out:
 
 ### Roadmap
 
-- **Verify Protect against a real Protect-enabled console** — covers both `unifi.local.protect.*` and the unverified `unifi.cloud.protect(consoleId).*` connector path; until then, both surfaces remain "wired but unproven against live hardware"
-- **Broaden the bundled Protect spec** beyond ~25 ops, or wire `UNIFI_PROTECT_SPEC_URL` to a maintained third-party spec
+- **Verify Protect against a real Protect-enabled console** — covers both `unifi.local.protect.*` and `unifi.cloud.protect(consoleId).*`; both URL patterns are officially documented but neither has yet been exercised live by us
+- **Broaden the bundled fallback** beyond the current ~18 JSON-over-HTTP ops, or expose binary surfaces (snapshots, RTSPS metadata, files) once the sandbox supports them
 - **Protect WebSocket events** (`/v1/subscribe/events`, `/v1/subscribe/devices`) — currently out of scope
 - **Per-tenant rate limiting** keyed on hashed credentials (currently per-IP)
 - **Optional persistent spec cache** versioned by controller fingerprint

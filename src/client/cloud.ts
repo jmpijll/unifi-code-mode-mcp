@@ -9,8 +9,10 @@
  *     Site Manager connector at /v1/connector/consoles/{consoleId}/proxy/network/integration.
  *   - createCloudProtectProxyClient(): Protect Integration API tunneled through the
  *     same connector at /v1/connector/consoles/{consoleId}/proxy/protect/integration.
- *     UNVERIFIED against a real Protect-enabled console — Ubiquiti has not documented
- *     this surface; we expose it on the assumption it follows the Network pattern.
+ *     URL pattern is officially documented by Ubiquiti (see
+ *     https://developer.ui.com/protect/v7.0.107/gettingstarted, "Remote" base URL
+ *     selector). Mock-verified end-to-end; live-verification awaits a Protect
+ *     deployment.
  */
 
 import { HttpClient } from './http.js';
@@ -70,10 +72,13 @@ export function createCloudNetworkProxyClient(
  * application:
  *   /v1/connector/consoles/{consoleId}/proxy/protect/integration
  *
- * UNVERIFIED — Ubiquiti has not publicly documented that the connector
- * supports proxying Protect, only Network. This factory is shipped on the
- * assumption that the connector is application-agnostic. If it turns out
- * to be Network-only, calls will fail with a clear HTTP error.
+ * The path pattern is officially documented by Ubiquiti's developer docs
+ * (https://developer.ui.com/protect/v7.0.107/...), which expose a
+ * "Remote" / "Local" base-URL selector mapping every operation to:
+ *   Remote: https://api.ui.com/v1/connector/consoles/{consoleId}/proxy/protect/integration/<op>
+ *   Local : https://<controller>/proxy/protect/integration/<op>
+ * Auth uses the Site Manager API key (from CloudTenantCreds), not a
+ * per-controller local key.
  */
 export function createCloudProtectProxyClient(
   creds: CloudTenantCreds,

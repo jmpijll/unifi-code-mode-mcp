@@ -223,13 +223,22 @@ export async function loadCloudSpec(opts: LoadCloudSpecOptions): Promise<Process
 /**
  * Load (and cache) the UniFi Protect Integration OpenAPI spec.
  *
+ * Ubiquiti publishes Protect specs on the same CDN pattern as Network:
+ *   https://apidoc-cdn.ui.com/protect/v<version>/integration.json
+ * Confirmed published versions live in KNOWN_PROTECT_SPEC_VERSIONS.
+ * Reference docs: https://developer.ui.com/protect/v7.0.107/gettingstarted
+ *
  * Loading order (first one that succeeds wins):
- *   1. opts.specUrlOverride (full URL — highest priority)
- *   2. apidoc-cdn.ui.com/protect/v<discovered-or-known>/integration.json
- *      (best-effort — Ubiquiti has not confirmed publishing here)
- *   3. The beezly/unifi-apis raw URL for the highest known version,
- *      ONLY if opts.allowBeezlyFallback is true (third-party, no license).
- *   4. The bundled curated fallback at src/spec/protect-fallback.json.
+ *   1. opts.specUrlOverride (full URL — highest priority).
+ *   2. apidoc-cdn.ui.com/protect/v<discovered>/integration.json — using the
+ *      controller-reported version from /proxy/protect/integration/v1/meta/info.
+ *   3. apidoc-cdn.ui.com/protect/v<known>/integration.json for each tagged
+ *      release in KNOWN_PROTECT_SPEC_VERSIONS (closest-known-good fallback,
+ *      same model the Network loader uses).
+ *   4. The beezly/unifi-apis raw URL for a higher minor (third-party,
+ *      no explicit license), ONLY if opts.allowBeezlyFallback is true.
+ *   5. The bundled curated fragment at src/spec/protect-fallback.json
+ *      (last-resort offline fallback).
  */
 export async function loadProtectSpec(
   opts: LoadProtectSpecOptions,
@@ -400,12 +409,14 @@ const BEEZLY_PROTECT_SPEC_URL =
 export const KNOWN_NETWORK_SPEC_VERSIONS: readonly string[] = ['10.1.84'];
 
 /**
- * Versions of the Protect Integration spec we **guess** Ubiquiti might
- * host on apidoc-cdn.ui.com (analogous to Network's structure). None of
- * these are confirmed; the loader falls through to bundled-fallback if
- * none resolve. Order: most-recent-likely first.
+ * Versions of the Protect Integration spec we've confirmed Ubiquiti
+ * publishes on apidoc-cdn.ui.com. These are tagged releases; controllers
+ * running other minor versions resolve to the closest known-good one
+ * here. Confirmed via HTTP HEAD probes 2026-05-07.
+ *
+ * Order: most-recent-known-good first. To extend, simply add a tag.
  */
-export const KNOWN_PROTECT_SPEC_VERSIONS: readonly string[] = ['7.1.46', '7.0.107'];
+export const KNOWN_PROTECT_SPEC_VERSIONS: readonly string[] = ['7.0.107', '7.0.94'];
 
 async function fetchProtectAppVersion(
   baseUrl: string,
