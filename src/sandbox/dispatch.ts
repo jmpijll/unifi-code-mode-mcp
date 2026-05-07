@@ -63,32 +63,34 @@ export async function dispatchRawRequest(
 }
 
 function routeArgsToRequest(op: IndexedOperation, args: DispatchOperationArgs): UnifiRequestParams {
-  const explicit =
-    args.pathParams !== undefined ||
-    args.query !== undefined ||
-    args.body !== undefined ||
-    args.headers !== undefined;
+  // Start from any explicitly-provided buckets, then auto-route the remaining
+  // top-level keys. This lets callers write the natural shape
+  // `{ siteId, wifiBroadcastId, body: { ... } }` for a PUT/POST: explicit
+  // `body` / `headers` are honoured, and the loose `siteId` / `wifiBroadcastId`
+  // are still substituted into the path.
+  const pathParams: Record<string, string | number | boolean> = {
+    ...(args.pathParams ?? {}),
+  };
+  const query: Record<string, string | number | boolean | string[] | undefined> = {
+    ...(args.query ?? {}),
+  };
+  const headers = args.headers;
+  let body: unknown = args.body;
 
-  if (explicit) {
-    return {
-      method: op.method as HttpMethod,
-      path: op.path,
-      pathParams: args.pathParams,
-      query: args.query,
-      body: args.body,
-      headers: args.headers,
-    };
-  }
-
-  const pathParams: Record<string, string | number | boolean> = {};
-  const query: Record<string, string | number | boolean | string[] | undefined> = {};
   const remaining: Record<string, unknown> = { ...args };
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+  delete remaining['pathParams'];
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+  delete remaining['query'];
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+  delete remaining['body'];
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+  delete remaining['headers'];
 
   for (const param of op.parameters) {
     if (param.in !== 'path' && param.in !== 'query') continue;
     if (!(param.name in remaining)) continue;
     const value = remaining[param.name];
-    // Remove this key from `remaining` so it isn't pushed into the request body.
     // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete remaining[param.name];
     if (value === undefined) continue;
@@ -108,19 +110,23 @@ function routeArgsToRequest(op: IndexedOperation, args: DispatchOperationArgs): 
     }
   }
 
-  let body: unknown = undefined;
-  if (op.hasRequestBody) {
+  // If the caller didn't supply an explicit `body` and the operation accepts
+  // one, gather any remaining unrouted keys into the body. We never override
+  // an explicitly-provided body with sibling keys.
+  if (body === undefined && op.hasRequestBody) {
     const remainingKeys = Object.keys(remaining);
     if (remainingKeys.length > 0) body = remaining;
   }
 
-  return {
+  const result: UnifiRequestParams = {
     method: op.method as HttpMethod,
     path: op.path,
     pathParams: Object.keys(pathParams).length > 0 ? pathParams : undefined,
     query: Object.keys(query).length > 0 ? query : undefined,
     body,
   };
+  if (headers !== undefined) result.headers = headers;
+  return result;
 }
 
 /**

@@ -106,7 +106,42 @@ describe('dispatchOperation', () => {
       pathParams: { siteId: 'overridden' },
       query: { expand: 'all' },
       body: undefined,
-      headers: undefined,
+    });
+  });
+
+  it('merges convenience path params with an explicit body (mixed-style call)', async () => {
+    // Regression: the natural shape for an update is
+    // `{ siteId, body: { ... } }`. Earlier the dispatcher's "explicit" branch
+    // bailed out on auto-routing whenever any of pathParams/query/body/headers
+    // was supplied, which left {siteId} unsubstituted in the URL.
+    const client = makeMockClient();
+    await dispatchOperation(client, SPEC, 'local', 'createNetwork', {
+      siteId: 'abc',
+      body: { name: 'net1', vlan: 10 },
+    });
+    expect(client.request).toHaveBeenCalledWith({
+      method: 'POST',
+      path: '/v1/sites/{siteId}/networks',
+      pathParams: { siteId: 'abc' },
+      query: undefined,
+      body: { name: 'net1', vlan: 10 },
+    });
+  });
+
+  it('mixes convenience query params with explicit headers', async () => {
+    const client = makeMockClient();
+    await dispatchOperation(client, SPEC, 'local', 'getSite', {
+      siteId: 'abc',
+      expand: 'devices',
+      headers: { 'X-Custom': 'value' },
+    });
+    expect(client.request).toHaveBeenCalledWith({
+      method: 'GET',
+      path: '/v1/sites/{siteId}',
+      pathParams: { siteId: 'abc' },
+      query: { expand: 'devices' },
+      body: undefined,
+      headers: { 'X-Custom': 'value' },
     });
   });
 });
