@@ -1,0 +1,129 @@
+================================================================================
+LIVE MUTATION VERIFICATION — UDM-Pro running Protect 7.0.107
+Recorded: 2026-05-07 ~17:39 CEST (15:39 UTC)
+Source:   scripts/verify-mutations.ts driving src/sandbox/execute-executor.ts
+================================================================================
+
+WHAT THIS PROVES
+  ✓ The unifi.local.protect.* sandbox surface can drive a real
+    mutation operation end-to-end against Protect-enabled UniFi OS
+    hardware. PATCH /v1/cameras/{id} with body { name: <new> } was
+    issued through the QuickJS sandbox via path-based request(), the
+    server returned the patched object, and a follow-up GET
+    confirmed the persisted state.
+  ✓ A round-trip rename + revert (rename to "<orig>-MCP-VERIFY-<ts>",
+    GET-verify, rename back to <orig>, GET-verify) completed cleanly
+    in three sequential ExecuteExecutor invocations (one per phase),
+    leaving the controller in exactly its original state.
+  ✓ The PATCH echo and the follow-up GET both returned the same name
+    in both phases — confirming Protect's PATCH semantics are
+    immediate-consistent on the camera record.
+  ✓ The pre-flight safety guards behaved correctly:
+      - Refuses to run unless target camera is in state=DISCONNECTED
+      - Refuses to run if the original name already matches the
+        MCP-VERIFY-* pattern (so a stale failed run can't self-clobber)
+      - Performs the revert in a separate executor invocation even
+        if the mutate-phase verify diverged, with a fatal alert
+        and non-zero exit if the revert itself fails
+
+WHAT THIS DOES NOT PROVE
+  ✗ Mutation verification on the Network surface. Every Network
+    create endpoint exposed in this controller's spec
+    (createAclRule, createDnsPolicy, createNetwork,
+    createWifiBroadcast, createTrafficMatchingList, createFirewallZone,
+    createFirewallPolicy, createVouchers) requires a polymorphic
+    discriminator (`$.type`, `$.management`, …) that the loaded
+    OpenAPI spec does NOT expose to the synthesizer. Probing those
+    discriminators blindly against live hardware is unsafe; a future
+    pass of the loader will need to extract polymorphic discriminator
+    enums (or we ship known-good fixture bodies per controller
+    version). Network mutation verification is deferred.
+  ✗ Multi-step mutation chains (create → update → delete on the same
+    entity).
+  ✗ End-to-end LLM-mediated mutation invocation. This run was driven
+    directly from a Node script through ExecuteExecutor; an LLM
+    client issuing the same PATCH via the `execute` MCP tool has not
+    yet been verified.
+
+KNOWN ARTEFACT WE COULDN'T CLEAN UP DURING DESIGN PROBING
+  During the design-probing phase (before this script was finalised) we
+  POSTed a test liveview to /v1/protect/integration/v1/liveviews to
+  confirm that endpoint accepted creates. It did. The Protect
+  Integration API does NOT expose a DELETE for liveviews — we
+  exercised /v1/liveviews/{id} (404 NOT_FOUND, secondary key=DELETE),
+  /v1/liveviews?id=... (same 404), and the non-Integration
+  /proxy/protect/api/liveviews/{id} (401 — different auth scheme). As
+  a damage-mitigation step the orphan liveview was PATCHed to
+  isGlobal=false / name="_unused" / empty slots, so it is invisible
+  in the default Protect dashboard. The maintainer needs to manually
+  delete this liveview from the Protect web UI:
+
+      Protect → Live View → Manage Layouts → "_unused" → Delete
+
+  Liveview create has been removed from the candidate list for any
+  future automated mutation verification; the script never creates
+  liveviews.
+
+EXACT SANDBOX CODE EXECUTED (per phase)
+  Phase 1 — pre-flight read:
+    var p = unifi.local.protect;
+    var cam = p.request({ method: 'GET', path: '/v1/cameras/<id>' });
+    ({ id: cam.id, name: cam.name, state: cam.state });
+
+  Phase 2 — mutate (rename) + verify:
+    var p = unifi.local.protect;
+    var patched = p.request({
+      method: 'PATCH',
+      path: '/v1/cameras/<id>',
+      body: { name: '<original>-MCP-VERIFY-<timestamp>' },
+    });
+    var verify = p.request({ method: 'GET', path: '/v1/cameras/<id>' });
+    ({ patched: { id, name }, verified: { id, name, state } });
+
+  Phase 3 — revert + verify:
+    var p = unifi.local.protect;
+    var patched = p.request({
+      method: 'PATCH',
+      path: '/v1/cameras/<id>',
+      body: { name: '<original>' },
+    });
+    var verify = p.request({ method: 'GET', path: '/v1/cameras/<id>' });
+    ({ patched: { id, name }, verified: { id, name, state } });
+
+RESULT (sanitized — IDs and original camera name redacted)
+  PRE  : id=<camera-id> name="<original>" state=DISCONNECTED
+  MID  : name="<original>-MCP-VERIFY-<ts>" (PATCH echo matched verify GET)
+  POST : name="<original>"                 (PATCH echo matched verify GET)
+  ✓ SUCCESS — round-trip complete, camera restored to original name
+
+PROBE METADATA
+  Controller:     UDM-Pro on UniFi OS, Protect application 7.0.107
+  Target camera:  one of the four cameras returned by the LAN-direct
+                  Protect sweep; specifically the only DISCONNECTED
+                  camera the script will mutate. Three of four cameras
+                  on this controller are in state=DISCONNECTED at
+                  recording time, so this constraint was readily met.
+  Spec:           UniFi Protect Integration API (loaded from
+                  apidoc-cdn.ui.com/protect/v7.0.107/integration.json,
+                  35 operations after build). PATCH /v1/cameras/{id}
+                  is operationId=patchV1CamerasId in the synthesizer's
+                  current naming scheme; we used the path-based
+                  request() form for portability across naming changes.
+  Sandbox:        3 ExecuteExecutor invocations × 2 host calls each
+                  = 6 host calls total. Per-phase budget cap: 5 calls
+                  / 30 s. Wall-clock end-to-end: ~5.1 s (dominated by
+                  spec-cache hit).
+  TLS:            UNIFI_LOCAL_INSECURE=true (UDM self-signed cert).
+                  The documented [unifi.local.protect] warning was
+                  emitted on each phase as expected.
+
+REPRODUCER
+  $ UNIFI_LOCAL_BASE_URL=https://172.27.1.1 \
+      UNIFI_LOCAL_INSECURE=true \
+      OP_LOCAL_REF='op://AI Agents/Unifi local api key/password' \
+      npx tsx scripts/verify-mutations.ts
+  # Defaults to the maintainer's "Tuin" camera id. Pass a different
+  # camera id as the first argv to target a different camera; the
+  # pre-flight guards will refuse to run unless that camera is also
+  # DISCONNECTED.
+================================================================================
