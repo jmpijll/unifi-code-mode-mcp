@@ -38,8 +38,8 @@ relying on it.
 | `unifi.local.*` | A local UniFi controller's Network Integration API (`https://<controller>/proxy/network/integration/v1/...`). | Local API key. |
 | `unifi.cloud.*` | UniFi Site Manager (`https://api.ui.com/v1/...`). | Cloud API key. |
 | `unifi.cloud.network(consoleId).*` | The Network Integration API of a remote console, **proxied through Site Manager** (`/v1/connector/consoles/{id}/proxy/network/integration`). | **Cloud** API key only. |
-| `unifi.local.protect.*` | A local controller's UniFi Protect Integration API (`https://<controller>/proxy/protect/integration/v1/...`) — cameras, NVRs, sensors, lights, alarm hubs, sirens, viewers, live-views, users. | Local API key (Protect must be installed on the controller). |
-| `unifi.cloud.protect(consoleId).*` | Protect Integration API tunneled through the Site Manager connector at `/v1/connector/consoles/{id}/proxy/protect/integration`. **UNVERIFIED** against a real Protect-enabled console. | Cloud API key only. |
+| `unifi.local.protect.*` | A local controller's UniFi Protect Integration API (`https://<controller>/proxy/protect/integration/v1/...`) — cameras + PTZ, NVRs, sensors, lights, chimes, viewers, live-views, plus the full official surface when the loader can fetch `apidoc-cdn.ui.com/protect/v<version>/integration.json`. | Local API key (Protect must be installed on the controller). |
+| `unifi.cloud.protect(consoleId).*` | Protect Integration API tunneled through the Site Manager connector at `/v1/connector/consoles/{id}/proxy/protect/integration`. URL pattern is officially documented by Ubiquiti (`developer.ui.com/protect/v7.0.107/...`, "Remote" base-URL selector). | Cloud API key only. |
 
 Pick the surface based on what the user has:
 
@@ -293,16 +293,22 @@ through a direct controller connection.
   exposed; secrets are not), WireGuard peer lists, Talk/Access state.
   Protect is exposed via its own Integration API at
   `/proxy/protect/integration/v1/...` (use `unifi.local.protect`).
-- **Protect surfaces are partially verified.** The bundled spec is a
-  curated ~25-operation fragment hand-written from publicly observable
-  controller behaviour; the full surface (alarm-manager webhooks,
-  files, fobs, link-stations, relays, speakers, ULP users, subscribe/*
-  WebSockets, talk-back, RTSPS streaming) is not in scope. To broaden
-  it, ask the operator to set `UNIFI_PROTECT_SPEC_URL=<full-spec>`.
-  `unifi.cloud.protect(consoleId)` is structurally analogous to
-  `unifi.cloud.network`, but Ubiquiti has not publicly documented that
-  the Site Manager connector proxies Protect — treat it as best-effort
-  and degrade to `unifi.local.protect` if the connector returns 404.
+- **Protect surfaces are mock-verified, not yet live-verified.** The
+  loader auto-fetches Ubiquiti's official spec at
+  `apidoc-cdn.ui.com/protect/v<version>/integration.json` (confirmed
+  available for v7.0.107 and v7.0.94); when it can reach the CDN you
+  get the full ~25-path surface across cameras, NVRs, sensors, lights,
+  chimes, viewers, liveviews, alarm-manager webhooks, files, RTSPS
+  streams, talk-back, and `subscribe/*` WebSockets. When the CDN is
+  unreachable, the bundled fallback covers ~18 JSON-over-HTTP ops; if
+  you need more in offline mode, set `UNIFI_PROTECT_SPEC_URL=<full-spec>`.
+  Both `unifi.local.protect` and `unifi.cloud.protect(consoleId)` URL
+  patterns are officially documented by Ubiquiti (the docs site has a
+  "Remote" / "Local" base-URL selector that maps each operation to
+  exactly the paths this server emits). Neither has been exercised
+  against a live Protect controller yet — when in doubt, prefer
+  `unifi.local.protect` (more direct, fewer moving parts) and surface
+  any non-200 cleanly so the user can diagnose.
 - **Snapshots in this repo's `out/` folder contain MAC and IP material**
   and are gitignored. Do not paste them into chats unless the user is
   the network owner.

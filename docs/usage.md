@@ -60,8 +60,8 @@ Run UniFi API calls inside the sandbox. Five target surfaces:
 | `unifi.local.*` | controller API key (`X-Unifi-Local-Api-Key`) | direct Network Integration API over LAN |
 | `unifi.cloud.*` | Site Manager key (`X-Unifi-Cloud-Api-Key`) | `api.ui.com` native (Hosts, Sites, Devices, ISP Metrics, SD-WAN) |
 | `unifi.cloud.network(consoleId).*` | Site Manager key | full Network Integration API, **tunneled through `api.ui.com`** so the controller never sees public traffic |
-| `unifi.local.protect.*` | controller API key | local Protect Integration API (cameras, NVRs, sensors, lights, alarm hubs, sirens, viewers, live-views, users) — needs Protect installed on the controller |
-| `unifi.cloud.protect(consoleId).*` | Site Manager key | Protect API tunneled through the same Site Manager connector. **UNVERIFIED** against a real Protect deployment — see [protect-design.md](protect-design.md) |
+| `unifi.local.protect.*` | controller API key | local Protect Integration API (cameras + PTZ, NVRs, sensors, lights, chimes, viewers, live-views, plus the full official surface when the loader can fetch `apidoc-cdn.ui.com/protect/v<version>/integration.json`) — needs Protect installed on the controller |
+| `unifi.cloud.protect(consoleId).*` | Site Manager key | Protect Integration API tunneled through the same Site Manager connector at `/v1/connector/consoles/{id}/proxy/protect/integration`. URL pattern is officially documented by Ubiquiti — see [protect-design.md](protect-design.md) |
 
 > **Sync-style calls.** Inside the sandbox, calls to `unifi.local.<op>(...)` and friends appear synchronous (the host wraps async work transparently). You generally don't need `await`. The script's last expression is the tool result. Async/await IIFEs are supported but use sync style if you're chaining many calls — QuickJS's asyncify shim is more reliable that way.
 

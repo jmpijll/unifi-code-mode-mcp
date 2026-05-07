@@ -61,7 +61,7 @@ Surfaces:
 - \`unifi.cloud\` — UniFi Site Manager API at \`https://api.ui.com\`. Available only if a cloud key is configured.
 - \`unifi.cloud.network(consoleId)\` — Network Integration API tunneled through the Site Manager connector. Same shape as \`unifi.local\`.
 - \`unifi.local.protect\` — UniFi Protect Integration API on a controller running Protect. Available only when both a Protect spec and local credentials are configured.
-- \`unifi.cloud.protect(consoleId)\` — Protect Integration API tunneled through the Site Manager connector. **UNVERIFIED** against a real Protect deployment; documented for parity with cloud.network.
+- \`unifi.cloud.protect(consoleId)\` — Protect Integration API tunneled through the Site Manager connector at \`/v1/connector/consoles/{consoleId}/proxy/protect/integration\`. URL pattern is officially documented by Ubiquiti. Mock-verified end-to-end; live verification against a Protect-enabled console pending.
 
 Each namespace exposes:
 

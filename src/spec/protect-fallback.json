@@ -3,7 +3,7 @@
   "info": {
     "title": "UniFi Protect Integration API (curated fallback)",
     "version": "fallback-1",
-    "description": "Curated minimal schema for the most commonly used operations of the UniFi Protect Integration API. Used when no Protect spec URL is reachable. Hand-written from publicly observable controller behaviour; does not reproduce any third-party spec. The full surface (alarm-manager webhooks, files, fobs, link-stations, relays, speakers, ULP users, subscribe/* WebSockets, talk-back, RTSPS streaming) is out of scope for this fallback. Set UNIFI_PROTECT_SPEC_URL to a full spec to broaden the surface."
+    "description": "Curated minimal schema for the most commonly used JSON-over-HTTP operations of the UniFi Protect Integration API. Used only when no Protect spec URL is reachable; the loader prefers Ubiquiti's official spec at https://apidoc-cdn.ui.com/protect/v<version>/integration.json. Reference docs: https://developer.ui.com/protect/v7.0.107/gettingstarted. The full surface (alarm-manager webhooks, files, RTSPS streams, talk-back sessions, subscribe/* WebSockets) is not in this fragment — set UNIFI_PROTECT_SPEC_URL to the official spec to broaden it."
   },
   "servers": [
     { "url": "/integration" }
@@ -15,11 +15,8 @@
     { "name": "sensors", "description": "Environmental and motion sensors" },
     { "name": "lights", "description": "UniFi smart lights" },
     { "name": "chimes", "description": "Doorbell chimes" },
-    { "name": "alarmHubs", "description": "Alarm hubs and their outputs" },
-    { "name": "sirens", "description": "Sirens / annunciators" },
     { "name": "viewers", "description": "Display devices (UniFi Viewport)" },
-    { "name": "liveviews", "description": "Saved camera live-view layouts" },
-    { "name": "users", "description": "Protect users" }
+    { "name": "liveviews", "description": "Saved camera live-view layouts" }
   ],
   "components": {
     "securitySchemes": {
@@ -63,12 +60,23 @@
       "get": {
         "operationId": "getCameraSnapshot",
         "tags": ["cameras"],
-        "summary": "Get a JPEG snapshot URL for a camera. Note: the response payload contains a URL or binary data; check the controller behaviour.",
+        "summary": "Get a JPEG snapshot URL or binary from a camera (check controller behaviour for response shape)",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
           { "name": "highQuality", "in": "query", "schema": { "type": "boolean" } }
         ],
         "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/v1/cameras/{id}/disable-mic-permanently": {
+      "post": {
+        "operationId": "disableCameraMicPermanently",
+        "tags": ["cameras"],
+        "summary": "Permanently disable a camera's microphone (one-way, irreversible)",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "204": { "description": "Disabled" } }
       }
     },
     "/v1/cameras/{id}/ptz/goto/{slot}": {
@@ -171,115 +179,6 @@
         "responses": { "200": { "description": "OK" } }
       }
     },
-    "/v1/alarm-hubs": {
-      "get": {
-        "operationId": "listAlarmHubs",
-        "tags": ["alarmHubs"],
-        "summary": "List all alarm hubs",
-        "responses": { "200": { "description": "OK" } }
-      }
-    },
-    "/v1/alarm-hubs/{id}": {
-      "get": {
-        "operationId": "getAlarmHub",
-        "tags": ["alarmHubs"],
-        "summary": "Get a single alarm hub by id",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
-        "responses": { "200": { "description": "OK" } }
-      }
-    },
-    "/v1/alarm-hubs/{id}/outputs/{outputId}/trigger": {
-      "post": {
-        "operationId": "triggerAlarmHubOutput",
-        "tags": ["alarmHubs"],
-        "summary": "Trigger an alarm hub output (siren, strobe, relay)",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "outputId", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "durationSeconds": { "type": "integer" }
-                }
-              }
-            }
-          }
-        },
-        "responses": { "204": { "description": "Triggered" } }
-      }
-    },
-    "/v1/sirens": {
-      "get": {
-        "operationId": "listSirens",
-        "tags": ["sirens"],
-        "summary": "List all sirens",
-        "responses": { "200": { "description": "OK" } }
-      }
-    },
-    "/v1/sirens/{id}": {
-      "get": {
-        "operationId": "getSiren",
-        "tags": ["sirens"],
-        "summary": "Get a single siren by id",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
-        "responses": { "200": { "description": "OK" } }
-      }
-    },
-    "/v1/sirens/{id}/play": {
-      "post": {
-        "operationId": "playSiren",
-        "tags": ["sirens"],
-        "summary": "Start a siren",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "durationSeconds": { "type": "integer" }
-                }
-              }
-            }
-          }
-        },
-        "responses": { "204": { "description": "Started" } }
-      }
-    },
-    "/v1/sirens/{id}/stop": {
-      "post": {
-        "operationId": "stopSiren",
-        "tags": ["sirens"],
-        "summary": "Stop a siren",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
-        "responses": { "204": { "description": "Stopped" } }
-      }
-    },
-    "/v1/sirens/{id}/test-sound": {
-      "post": {
-        "operationId": "testSirenSound",
-        "tags": ["sirens"],
-        "summary": "Play a short test sound on a siren",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
-        "responses": { "204": { "description": "Played" } }
-      }
-    },
     "/v1/viewers": {
       "get": {
         "operationId": "listViewers",
@@ -312,25 +211,6 @@
         "operationId": "getLiveview",
         "tags": ["liveviews"],
         "summary": "Get a single live-view by id",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
-        "responses": { "200": { "description": "OK" } }
-      }
-    },
-    "/v1/users": {
-      "get": {
-        "operationId": "listProtectUsers",
-        "tags": ["users"],
-        "summary": "List Protect users",
-        "responses": { "200": { "description": "OK" } }
-      }
-    },
-    "/v1/users/{id}": {
-      "get": {
-        "operationId": "getProtectUser",
-        "tags": ["users"],
-        "summary": "Get a single Protect user by id",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
