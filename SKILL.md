@@ -315,13 +315,25 @@ have LAN reachability.
   running Network 10.3.58 (read-only sweep, 2026-05-07 — 1 site / 5
   devices / 2 WAN / 2 Wi-Fi / 32 clients enumerated, see
   `out/verification/local-network-live-smoke.txt`).
-- **Mutations on every surface (Network and Protect) are wired but not
-  yet exercised live.** The 2026-05-07 live sweeps were read-only:
-  Network listed sites/networks/wifi/devices/clients, Protect called
-  `getProtectMetaInfo` and `listCameras`. PATCH/POST/DELETE on Network
-  resources, PTZ commands, `disableCameraMicPermanently`, and the
-  alarm-manager webhook trigger are wired through the spec but unproven
-  against real hardware.
+- **Protect camera-rename round-trip is live-verified** against a real
+  UDM-Pro running Protect 7.0.107 (2026-05-07 — see
+  `out/verification/mutation-live-smoke.txt`). `PATCH /v1/cameras/{id}`
+  with `{ name: <new> }` was driven through the sandbox, GET-verified,
+  reverted, GET-verified — three sequential `execute()` invocations,
+  six host calls, ~5 s wall-clock. Pre-flight refuses to run on
+  non-DISCONNECTED cameras.
+- **Network mutations are wired but unproven live.** Every Network
+  create endpoint requires a polymorphic discriminator (`$.type`,
+  `$.management`, …) that the loaded OpenAPI spec does not expose to
+  the synthesizer. Probing them blindly against live hardware is
+  unsafe; the loader needs a polymorphic-discriminator extraction
+  pass first. Until then, treat all Network mutations as theoretical.
+- **Other Protect mutations beyond rename are wired but unproven
+  live** — PTZ commands, `disableCameraMicPermanently` (irreversible
+  per its name), alarm-manager webhook trigger, rtsps-stream
+  enable/disable. Note: `POST /v1/liveviews` accepts creates but the
+  Integration API has **no DELETE** for liveviews — never create one
+  programmatically without manual cleanup capability.
 - **Binary/streaming Protect ops** (snapshot bytes, RTSPS streams,
   talk-back, `subscribe/*` WebSockets) are present in the spec but the
   JSON-only `HttpClient` doesn't speak them yet.

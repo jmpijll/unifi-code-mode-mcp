@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `unifi.local.protect.*`). Reads the local API key from 1Password
   (`OP_LOCAL_REF`, default `op://AI Agents/Unifi local api key/password`)
   with env-var override.
+- `scripts/verify-mutations.ts` — live mutation round-trip script
+  (rename a DISCONNECTED Protect camera → GET-verify → revert →
+  GET-verify). Hard pre-flight guards: refuses to run if camera is
+  not DISCONNECTED, refuses if name already matches a stale-test
+  pattern, runs revert in a separate `ExecuteExecutor` invocation
+  with fatal exit codes if revert fails.
 
 ### Verified live
 
@@ -28,6 +34,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   4 cameras returned in 162 ms — identical result to the cloud-Protect
   run on the same hardware (cross-confirms the wire path). Sanitized
   transcript at `out/verification/local-protect-live-smoke.txt`.
+- **Mutation round-trip on Protect** (`PATCH /v1/cameras/{id}`)
+  against the same UDM-Pro. Camera-rename → GET-verify → revert →
+  GET-verify completed cleanly in three sequential `ExecuteExecutor`
+  invocations (6 host calls total, ~5 s wall-clock). Sanitized
+  transcript at `out/verification/mutation-live-smoke.txt`.
+
+### Discovered
+
+- **Network mutations need polymorphic-discriminator extraction in
+  the spec loader.** Every Network create endpoint exposed in
+  Network 10.3.58 (`createAclRule`, `createDnsPolicy`,
+  `createNetwork`, `createWifiBroadcast`,
+  `createTrafficMatchingList`, `createFirewallZone`,
+  `createFirewallPolicy`, `createVouchers`) returns
+  `api.request.missing-type-id` on an empty body. The discriminator
+  enum is in the OpenAPI spec but is not currently surfaced to the
+  synthesizer. Live mutation verification on Network is therefore
+  deferred until the loader extracts those enums (or we ship known-
+  good fixture bodies per controller version).
+- **Protect Integration API does not expose DELETE for liveviews.**
+  `POST /v1/liveviews` accepts creates and `PATCH /v1/liveviews/{id}`
+  works (with full schema), but `DELETE /v1/liveviews/{id}`,
+  `DELETE /v1/liveviews?id=...`, and the non-Integration
+  `/proxy/protect/api/liveviews/{id}` paths all 404 / 401. A liveview
+  was inadvertently created during design probing of this verification
+  pass; it's PATCHed to `name="_unused"` and `isGlobal=false`, but the
+  maintainer needs to manually delete it from the Protect web UI
+  (Protect → Live View → Manage Layouts → "_unused" → Delete).
+  `verify-mutations.ts` therefore never creates liveviews.
 
 ### Documentation
 
