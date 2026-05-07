@@ -1,0 +1,133 @@
+name: Bug report
+description: Something is broken in the MCP server itself.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing. Before you do:
+
+        - **Don't paste API keys, controller fingerprints, MAC
+          addresses, or production device names.** Redact them.
+        - **Security issues:** don't use this form. See
+          [SECURITY.md](https://github.com/jmpijll/unifi-code-mode-mcp/blob/main/SECURITY.md).
+        - **You hit an unverified agent platform:** use the
+          *Verification report* template instead.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing what went wrong.
+      placeholder: "When I call `unifi.cloud.protect(...).request({...})`, I get …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: |
+        The exact JS you ran in `execute`, plus any args. Use a
+        fenced code block.
+      placeholder: |
+        ```js
+        const p = unifi.cloud.protect('CONSOLE_ID');
+        const cameras = p.request({ method: 'GET', path: '/v1/cameras' });
+        return cameras.length;
+        ```
+      render: javascript
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What you thought would happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: |
+        What happened. Include the full error message if there was one.
+        If there was a stack trace, paste it.
+    validations:
+      required: true
+
+  - type: input
+    id: server_version
+    attributes:
+      label: Server version
+      description: From `package.json` or `git rev-parse --short HEAD`.
+      placeholder: "v0.2.0-beta.1 (commit abcdef0)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface
+      multiple: true
+      options:
+        - "unifi.local.network"
+        - "unifi.local.protect"
+        - "unifi.cloud (Site Manager)"
+        - "unifi.cloud.network(consoleId)"
+        - "unifi.cloud.protect(consoleId)"
+        - "search tool"
+        - "execute tool itself"
+        - "MCP transport (stdio / HTTP)"
+        - "Cloudflare Workers entry"
+        - "Other / not sure"
+    validations:
+      required: true
+
+  - type: input
+    id: controller
+    attributes:
+      label: Controller version
+      description: |
+        For Network: `unifi.local.info.getApiInfo()` or the controller's
+        Settings → System page. For Protect: `GET /v1/meta/info` against
+        a Protect endpoint.
+      placeholder: "Network 10.3.58, Protect 7.0.107"
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware (optional)
+      placeholder: "UDM-Pro, UDM-SE, UCG-Ultra, self-hosted UniFi Network controller, etc."
+
+  - type: input
+    id: node_os
+    attributes:
+      label: Node.js + OS
+      placeholder: "Node 22.10 on macOS 25; Node 20 on Ubuntu 24"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs
+      description: |
+        Anything from stderr, the agent transcript, or
+        `out/verification/*.txt`. Redact: API keys, MAC addresses, IPs
+        of LAN devices, real device names if you don't want them
+        public.
+      render: text
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues for this bug
+          required: true
+        - label: I have redacted secrets and PII
+          required: true
+        - label: I have read [SECURITY.md](https://github.com/jmpijll/unifi-code-mode-mcp/blob/main/SECURITY.md) and confirmed this is not a security issue
+          required: true
