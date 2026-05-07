@@ -1,6 +1,6 @@
 {
   "name": "unifi-code-mode-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Code-mode MCP server for the UniFi Network Integration API and Site Manager (cloud) API. Two tools (search + execute) with QuickJS WASM sandbox plus an optional Cloudflare Workers entry. Single-user (env) and multi-user (per-request HTTP headers) modes.",
   "type": "module",
   "main": "dist/index.js",
