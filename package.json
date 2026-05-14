@@ -72,7 +72,7 @@
     "@apidevtools/json-schema-ref-parser": "^11.7.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "quickjs-emscripten": "^0.31.0",
-    "undici": "^7.0.0",
+    "undici": "^8.3.0",
     "zod": "^3.23.0"
   }
 }
