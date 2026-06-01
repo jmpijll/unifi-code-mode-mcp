@@ -55,7 +55,7 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@cloudflare/codemode": "^0.3.4",
+    "@cloudflare/codemode": "^0.3.6",
     "@cloudflare/workers-types": "^4.20260507.1",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
