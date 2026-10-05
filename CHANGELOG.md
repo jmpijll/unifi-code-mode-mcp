@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Enforce consistent formatting and contributor/Dependabot conventions; include linked documentation and artwork in package contents.
+- Add the same offline built-MCP smoke and Worker dry-run commands; use package versions in server-factory defaults.
+
 - Upgrade Wrangler to the tested 4.105 baseline so `worker_loaders` is recognized; add a Worker dry-run CI job.
 - Derive Node MCP version metadata from package.json across the family; use package metadata in Worker scaffolds to prevent release drift.
 - Align README presentation with Vapour and Slightshot, retaining detailed setup and historical verification in the usage guide.

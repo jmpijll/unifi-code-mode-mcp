@@ -14,11 +14,7 @@
  * Hosts are responsible for enforcing the per-execute call budget.
  */
 
-import {
-  newAsyncContext,
-  type QuickJSAsyncContext,
-  type QuickJSHandle,
-} from 'quickjs-emscripten';
+import { newAsyncContext, type QuickJSAsyncContext, type QuickJSHandle } from 'quickjs-emscripten';
 import type { HttpClient } from '../client/http.js';
 import { createLocalClient, createLocalProtectClient } from '../client/local.js';
 import {
@@ -33,11 +29,7 @@ import {
   dispatchRawRequest,
   UnknownOperationError,
 } from './dispatch.js';
-import {
-  configureRuntimeLimits,
-  formatError,
-  setupConsole,
-} from './executor.js';
+import { configureRuntimeLimits, formatError, setupConsole } from './executor.js';
 import { DEFAULT_LIMITS, type SandboxLimits } from './limits.js';
 import type { ExecuteResult, LogEntry } from './types.js';
 import { MissingCredentialsError, type TenantContext } from '../tenant/context.js';
@@ -72,10 +64,7 @@ export interface ExecuteExecutorOptions {
    * Lazy local-Protect client factory — only invoked if the sandbox
    * calls a unifi.local.protect.* operation.
    */
-  buildLocalProtectClient?: (
-    tenant: TenantContext,
-    onWarn: (msg: string) => void,
-  ) => HttpClient;
+  buildLocalProtectClient?: (tenant: TenantContext, onWarn: (msg: string) => void) => HttpClient;
   /**
    * Lazy cloud-Protect-proxy client factory — only invoked if the sandbox
    * calls a unifi.cloud.protect(consoleId).* operation.
@@ -115,12 +104,9 @@ export class ExecuteExecutor {
     this.limits = { ...DEFAULT_LIMITS, ...opts.limits };
     this.buildLocalClient = opts.buildLocalClient ?? defaultBuildLocalClient;
     this.buildCloudClient = opts.buildCloudClient ?? defaultBuildCloudClient;
-    this.buildCloudNetworkClient =
-      opts.buildCloudNetworkClient ?? defaultBuildCloudNetworkClient;
-    this.buildLocalProtectClient =
-      opts.buildLocalProtectClient ?? defaultBuildLocalProtectClient;
-    this.buildCloudProtectClient =
-      opts.buildCloudProtectClient ?? defaultBuildCloudProtectClient;
+    this.buildCloudNetworkClient = opts.buildCloudNetworkClient ?? defaultBuildCloudNetworkClient;
+    this.buildLocalProtectClient = opts.buildLocalProtectClient ?? defaultBuildLocalProtectClient;
+    this.buildCloudProtectClient = opts.buildCloudProtectClient ?? defaultBuildCloudProtectClient;
   }
 
   async execute(code: string): Promise<ExecuteResult> {
@@ -436,21 +422,18 @@ function bindNamespaceFunctions(
   context.setProp(context.global, callName, callFn);
   callFn.dispose();
 
-  const rawFn = context.newAsyncifiedFunction(
-    rawName,
-    async (argsJsonHandle: QuickJSHandle) => {
-      const argsJson = context.getString(argsJsonHandle);
-      try {
-        binding.callBudgetGuard();
-        const args = parseJson(argsJson) as unknown as Parameters<typeof dispatchRawRequest>[1];
-        const client = binding.getClient();
-        const response = await dispatchRawRequest(client, args);
-        return jsonResponseToHandle(context, response.data);
-      } catch (err) {
-        throw new Error(formatNamespacedError(namespace, err));
-      }
-    },
-  );
+  const rawFn = context.newAsyncifiedFunction(rawName, async (argsJsonHandle: QuickJSHandle) => {
+    const argsJson = context.getString(argsJsonHandle);
+    try {
+      binding.callBudgetGuard();
+      const args = parseJson(argsJson) as unknown as Parameters<typeof dispatchRawRequest>[1];
+      const client = binding.getClient();
+      const response = await dispatchRawRequest(client, args);
+      return jsonResponseToHandle(context, response.data);
+    } catch (err) {
+      throw new Error(formatNamespacedError(namespace, err));
+    }
+  });
   context.setProp(context.global, rawName, rawFn);
   rawFn.dispose();
 }
@@ -527,10 +510,10 @@ function formatCloudNetworkError(err: unknown): string {
     err instanceof UnifiHttpError
       ? 'unifi.cloud.network.http'
       : err instanceof MissingCredentialsError
-      ? 'unifi.cloud.network.missing-credentials'
-      : err instanceof UnknownOperationError
-      ? 'unifi.cloud.network.unknown-operation'
-      : 'unifi.cloud.network.error';
+        ? 'unifi.cloud.network.missing-credentials'
+        : err instanceof UnknownOperationError
+          ? 'unifi.cloud.network.unknown-operation'
+          : 'unifi.cloud.network.error';
   return `[${tag}] ${detail}`;
 }
 
@@ -658,10 +641,10 @@ function formatLocalProtectError(err: unknown): string {
     err instanceof UnifiHttpError
       ? 'unifi.local.protect.http'
       : err instanceof MissingCredentialsError
-      ? 'unifi.local.protect.missing-credentials'
-      : err instanceof UnknownOperationError
-      ? 'unifi.local.protect.unknown-operation'
-      : 'unifi.local.protect.error';
+        ? 'unifi.local.protect.missing-credentials'
+        : err instanceof UnknownOperationError
+          ? 'unifi.local.protect.unknown-operation'
+          : 'unifi.local.protect.error';
   return `[${tag}] ${detail}`;
 }
 
@@ -671,10 +654,10 @@ function formatCloudProtectError(err: unknown): string {
     err instanceof UnifiHttpError
       ? 'unifi.cloud.protect.http'
       : err instanceof MissingCredentialsError
-      ? 'unifi.cloud.protect.missing-credentials'
-      : err instanceof UnknownOperationError
-      ? 'unifi.cloud.protect.unknown-operation'
-      : 'unifi.cloud.protect.error';
+        ? 'unifi.cloud.protect.missing-credentials'
+        : err instanceof UnknownOperationError
+          ? 'unifi.cloud.protect.unknown-operation'
+          : 'unifi.cloud.protect.error';
   return `[${tag}] ${detail}`;
 }
 
@@ -684,10 +667,10 @@ function formatNamespacedError(namespace: 'local' | 'cloud', err: unknown): stri
     err instanceof UnifiHttpError
       ? `unifi.${namespace}.http`
       : err instanceof MissingCredentialsError
-      ? `unifi.${namespace}.missing-credentials`
-      : err instanceof UnknownOperationError
-      ? `unifi.${namespace}.unknown-operation`
-      : `unifi.${namespace}.error`;
+        ? `unifi.${namespace}.missing-credentials`
+        : err instanceof UnknownOperationError
+          ? `unifi.${namespace}.unknown-operation`
+          : `unifi.${namespace}.error`;
   return `[${tag}] ${detail}`;
 }
 
@@ -725,21 +708,14 @@ function jsonResponseToHandle(context: QuickJSAsyncContext, data: unknown): Quic
   return parsed.value;
 }
 
-
 // ─── Default client factories ───────────────────────────────────────
 
-function defaultBuildLocalClient(
-  tenant: TenantContext,
-  onWarn: (msg: string) => void,
-): HttpClient {
+function defaultBuildLocalClient(tenant: TenantContext, onWarn: (msg: string) => void): HttpClient {
   if (!tenant.local) throw new MissingCredentialsError('local');
   return createLocalClient(tenant.local, { onWarn });
 }
 
-function defaultBuildCloudClient(
-  tenant: TenantContext,
-  onWarn: (msg: string) => void,
-): HttpClient {
+function defaultBuildCloudClient(tenant: TenantContext, onWarn: (msg: string) => void): HttpClient {
   if (!tenant.cloud) throw new MissingCredentialsError('cloud');
   return createCloudClient(tenant.cloud, { onWarn });
 }

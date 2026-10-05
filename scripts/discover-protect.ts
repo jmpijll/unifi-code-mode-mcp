@@ -21,10 +21,7 @@
 import { execSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import {
-  createCloudClient,
-  createCloudProtectProxyClient,
-} from '../src/client/cloud.js';
+import { createCloudClient, createCloudProtectProxyClient } from '../src/client/cloud.js';
 import { loadProtectSpec } from '../src/spec/loader.js';
 import { ExecuteExecutor } from '../src/sandbox/execute-executor.js';
 import { buildContextFromEnv } from '../src/tenant/context.js';
@@ -45,9 +42,7 @@ function getApiKey(): string {
   return execSync(`op read ${JSON.stringify(OP_REF)}`, { encoding: 'utf-8' }).trim();
 }
 
-async function listHosts(
-  cloud: ReturnType<typeof createCloudClient>,
-): Promise<HostSummary[]> {
+async function listHosts(cloud: ReturnType<typeof createCloudClient>): Promise<HostSummary[]> {
   const res = await cloud.request<{ data?: Array<Record<string, unknown>> }>({
     method: 'GET',
     path: '/v1/hosts',
@@ -102,7 +97,12 @@ async function probeProtect(
     const message = err instanceof Error ? err.message : String(err);
     const m = message.match(/^\s*\[unifi\.cloud\.protect.*?\]\s+(\d{3})\b/);
     const status = m ? Number(m[1]) : undefined;
-    return { consoleId, reachable: false, ...(status !== undefined ? { status } : {}), error: message };
+    return {
+      consoleId,
+      reachable: false,
+      ...(status !== undefined ? { status } : {}),
+      error: message,
+    };
   }
 }
 
@@ -161,7 +161,11 @@ async function runSandboxSmoke(
   if (!result.ok) {
     return { ok: false, logs: result.logs, error: result.error ?? 'unknown' };
   }
-  const data = result.data as { meta?: unknown; cameraCount?: number; cameraSample?: Array<{ id?: string; name?: string; state?: string }> };
+  const data = result.data as {
+    meta?: unknown;
+    cameraCount?: number;
+    cameraSample?: Array<{ id?: string; name?: string; state?: string }>;
+  };
   return {
     ok: true,
     meta: data.meta,
@@ -226,7 +230,9 @@ async function main(): Promise<void> {
 
   const target = reachable[0];
   if (target) {
-    console.error(`[discover-protect] running sandbox smoke against consoleId=${target.consoleId} …`);
+    console.error(
+      `[discover-protect] running sandbox smoke against consoleId=${target.consoleId} …`,
+    );
     const smoke = await runSandboxSmoke(apiKey, target.consoleId);
     summary.sandboxSmoke = {
       consoleId: target.consoleId,
@@ -241,7 +247,9 @@ async function main(): Promise<void> {
       `[discover-protect] sandbox ok=${String(smoke.ok)}${smoke.cameraSummary ? ` cameras=${String(smoke.cameraSummary.count)}` : ''}${smoke.error ? ` error=${smoke.error}` : ''}`,
     );
   } else {
-    console.error('[discover-protect] No Protect-enabled consoles reachable. Skipping sandbox smoke.');
+    console.error(
+      '[discover-protect] No Protect-enabled consoles reachable. Skipping sandbox smoke.',
+    );
   }
 
   const outDir = resolve(process.cwd(), 'out');

@@ -79,9 +79,9 @@ describe('TenantContext', () => {
     });
 
     it('throws when only one of api-key/base-url is supplied', () => {
-      expect(() =>
-        buildContextFromHeaders({ [HEADER_LOCAL_API_KEY]: 'tk' }, {}),
-      ).toThrow(MissingCredentialsError);
+      expect(() => buildContextFromHeaders({ [HEADER_LOCAL_API_KEY]: 'tk' }, {})).toThrow(
+        MissingCredentialsError,
+      );
     });
 
     it('falls back to env when headers absent', () => {

@@ -16,8 +16,10 @@ import { buildContextFromEnv } from '../src/tenant/context.js';
 const OP_REF = process.env['OP_LOCAL_REF'] ?? 'op://AI Agents/Unifi local api key/password';
 
 function getKey(): string {
-  return process.env['UNIFI_LOCAL_API_KEY']
-    ?? execSync(`op read ${JSON.stringify(OP_REF)}`, { encoding: 'utf-8' }).trim();
+  return (
+    process.env['UNIFI_LOCAL_API_KEY'] ??
+    execSync(`op read ${JSON.stringify(OP_REF)}`, { encoding: 'utf-8' }).trim()
+  );
 }
 
 async function main(): Promise<void> {

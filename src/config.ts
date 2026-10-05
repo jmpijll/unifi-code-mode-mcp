@@ -26,7 +26,9 @@ const configSchema = z.object({
   unifiLocalInsecure: z
     .string()
     .optional()
-    .transform((v) => (v === undefined ? undefined : ['true', '1', 'yes'].includes(v.toLowerCase()))),
+    .transform((v) =>
+      v === undefined ? undefined : ['true', '1', 'yes'].includes(v.toLowerCase()),
+    ),
 
   // Cloud UniFi
   unifiCloudBaseUrl: z.string().default('https://api.ui.com'),
@@ -38,7 +40,9 @@ const configSchema = z.object({
   unifiProtectAllowBeezlyFallback: z
     .string()
     .optional()
-    .transform((v) => (v === undefined ? undefined : ['true', '1', 'yes'].includes(v.toLowerCase()))),
+    .transform((v) =>
+      v === undefined ? undefined : ['true', '1', 'yes'].includes(v.toLowerCase()),
+    ),
   unifiSpecCacheDir: z
     .string()
     .default('./src/spec/cache')

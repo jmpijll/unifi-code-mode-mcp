@@ -46,8 +46,7 @@ import { loadProtectSpec } from '../src/spec/loader.js';
 import { ExecuteExecutor } from '../src/sandbox/execute-executor.js';
 import { buildContextFromEnv } from '../src/tenant/context.js';
 
-const OP_LOCAL_REF =
-  process.env['OP_LOCAL_REF'] ?? 'op://AI Agents/Unifi local api key/password';
+const OP_LOCAL_REF = process.env['OP_LOCAL_REF'] ?? 'op://AI Agents/Unifi local api key/password';
 
 function requireCameraId(): string {
   const v = process.argv[2] ?? process.env['UNIFI_CAMERA_ID'];
@@ -81,16 +80,20 @@ function getKey(): string {
 }
 
 function isOnlyHighEnabled(s: RtspsState): boolean {
-  return typeof s.high === 'string' && s.high.length > 0
-    && s.medium === null && s.low === null && s.package === null;
+  return (
+    typeof s.high === 'string' &&
+    s.high.length > 0 &&
+    s.medium === null &&
+    s.low === null &&
+    s.package === null
+  );
 }
 
 function describe(s: RtspsState): string {
-  const enabled = (Object.keys(s) as Array<keyof RtspsState>)
-    .filter((k) => {
-      const v = s[k];
-      return typeof v === 'string' && v.length > 0;
-    });
+  const enabled = (Object.keys(s) as Array<keyof RtspsState>).filter((k) => {
+    const v = s[k];
+    return typeof v === 'string' && v.length > 0;
+  });
   return enabled.length === 0 ? '<all null>' : enabled.join(',');
 }
 
@@ -108,7 +111,9 @@ async function main(): Promise<void> {
     apiKey,
     insecure,
     cacheDir: resolve(process.cwd(), 'src/spec/cache'),
-    onWarn: (m) => { console.error(`[verify-mutations-rtsps][warn] ${m}`); },
+    onWarn: (m) => {
+      console.error(`[verify-mutations-rtsps][warn] ${m}`);
+    },
   });
   console.error(
     `[verify-mutations-rtsps] protect spec ${protectSpec.title} v${protectSpec.version} (${String(protectSpec.operations.length)} ops)`,
@@ -134,25 +139,29 @@ async function main(): Promise<void> {
   `);
   if (!preResult.ok) throw new Error(`pre-flight read failed: ${preResult.error ?? 'unknown'}`);
   const pre = preResult.data as { camera: CameraSnapshot; rtsps: RtspsState };
-  console.error(`[verify-mutations-rtsps] PRE  : id=${pre.camera.id} name="${pre.camera.name}" state=${pre.camera.state} rtsps=${describe(pre.rtsps)}`);
+  console.error(
+    `[verify-mutations-rtsps] PRE  : id=${pre.camera.id} name="${pre.camera.name}" state=${pre.camera.state} rtsps=${describe(pre.rtsps)}`,
+  );
 
   if (pre.camera.state !== 'DISCONNECTED') {
     throw new Error(
       `aborting: camera is in state ${pre.camera.state}, not DISCONNECTED. ` +
-      `This script only mutates DISCONNECTED cameras to ensure no live-stream impact.`,
+        `This script only mutates DISCONNECTED cameras to ensure no live-stream impact.`,
     );
   }
   if (!isOnlyHighEnabled(pre.rtsps)) {
     throw new Error(
       `aborting: rtsps state is "${describe(pre.rtsps)}" but expected "high" only. ` +
-      `Refusing to touch a camera that's been manually re-configured. ` +
-      `Restore the camera to high-only RTSPS in the Protect UI before re-running.`,
+        `Refusing to touch a camera that's been manually re-configured. ` +
+        `Restore the camera to high-only RTSPS in the Protect UI before re-running.`,
     );
   }
   const originalHighUrl = pre.rtsps.high as string;
 
   // Phase 2 — mutate (DELETE high)
-  console.error(`[verify-mutations-rtsps] MUTATE: DELETE /v1/cameras/${cameraId}/rtsps-stream?qualities=high`);
+  console.error(
+    `[verify-mutations-rtsps] MUTATE: DELETE /v1/cameras/${cameraId}/rtsps-stream?qualities=high`,
+  );
   const mutExec = new ExecuteExecutor({
     tenant,
     protectSpec,
@@ -172,15 +181,21 @@ async function main(): Promise<void> {
     verify;
   `);
   if (!mutResult.ok) {
-    console.error(`[verify-mutations-rtsps] FATAL: mutate phase failed — rtsps state should still be "${describe(pre.rtsps)}". Verify in UI.`);
+    console.error(
+      `[verify-mutations-rtsps] FATAL: mutate phase failed — rtsps state should still be "${describe(pre.rtsps)}". Verify in UI.`,
+    );
     console.error(`[verify-mutations-rtsps] error: ${mutResult.error ?? 'unknown'}`);
     process.exit(1);
   }
   const midState = mutResult.data as RtspsState;
-  console.error(`[verify-mutations-rtsps] MID  : rtsps=${describe(midState)} (high=${midState.high === null ? 'null' : 'STILL SET'})`);
+  console.error(
+    `[verify-mutations-rtsps] MID  : rtsps=${describe(midState)} (high=${midState.high === null ? 'null' : 'STILL SET'})`,
+  );
 
   // Phase 3 — revert (POST recreate)
-  console.error(`[verify-mutations-rtsps] REVERT: POST /v1/cameras/${cameraId}/rtsps-stream body={qualities:['high']}`);
+  console.error(
+    `[verify-mutations-rtsps] REVERT: POST /v1/cameras/${cameraId}/rtsps-stream body={qualities:['high']}`,
+  );
   const revExec = new ExecuteExecutor({
     tenant,
     protectSpec,
@@ -200,23 +215,34 @@ async function main(): Promise<void> {
     ({ created: created, verified: verify });
   `);
   if (!revResult.ok) {
-    console.error(`[verify-mutations-rtsps] FATAL: REVERT FAILED. Camera "${pre.camera.name}" currently has rtsps=${describe(midState)}. MANUALLY RE-ENABLE the "high" RTSPS stream in the Protect UI for camera ${cameraId}.`);
+    console.error(
+      `[verify-mutations-rtsps] FATAL: REVERT FAILED. Camera "${pre.camera.name}" currently has rtsps=${describe(midState)}. MANUALLY RE-ENABLE the "high" RTSPS stream in the Protect UI for camera ${cameraId}.`,
+    );
     console.error(`[verify-mutations-rtsps] error: ${revResult.error ?? 'unknown'}`);
     process.exit(2);
   }
   const rev = revResult.data as { created: RtspsState; verified: RtspsState };
-  console.error(`[verify-mutations-rtsps] POST : rtsps=${describe(rev.verified)} (high token rotated: ${String(rev.verified.high !== originalHighUrl)})`);
+  console.error(
+    `[verify-mutations-rtsps] POST : rtsps=${describe(rev.verified)} (high token rotated: ${String(rev.verified.high !== originalHighUrl)})`,
+  );
 
   if (!isOnlyHighEnabled(rev.verified)) {
-    console.error(`[verify-mutations-rtsps] FATAL: post-revert state is "${describe(rev.verified)}" but expected "high" only. MANUAL FIX REQUIRED in the Protect UI.`);
+    console.error(
+      `[verify-mutations-rtsps] FATAL: post-revert state is "${describe(rev.verified)}" but expected "high" only. MANUAL FIX REQUIRED in the Protect UI.`,
+    );
     process.exit(3);
   }
 
   console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.error('[verify-mutations-rtsps] ✓ SUCCESS — round-trip complete, "high" RTSPS stream restored (with new token)');
+  console.error(
+    '[verify-mutations-rtsps] ✓ SUCCESS — round-trip complete, "high" RTSPS stream restored (with new token)',
+  );
 }
 
 main().catch((err: unknown) => {
-  console.error('[verify-mutations-rtsps] FAILED:', err instanceof Error ? err.message : String(err));
+  console.error(
+    '[verify-mutations-rtsps] FAILED:',
+    err instanceof Error ? err.message : String(err),
+  );
   process.exit(1);
 });

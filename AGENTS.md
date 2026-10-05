@@ -101,8 +101,7 @@ npm run format:check                  # prettier
 npm run build                         # tsc → dist/
 ```
 
-Before opening any PR, lint, typecheck, tests and build must be green. Run
-format:check separately and report existing drift; CI keeps formatting advisory. CI runs the same set on
+Before opening any PR, `npm run check` must be green, including the formatting gate. CI runs the same set on
 Node 22 and 24.
 
 For end-to-end smoke against a real controller (read-only):
@@ -467,3 +466,9 @@ Two client-specific gotchas you'll save time knowing about:
 
 If you pick one up, write a short design note in `docs/` first.
 The Protect surface design note lives at [`docs/protect-design.md`](docs/protect-design.md).
+
+## Shared offline validation
+
+`npm run check` includes strict formatting and `smoke:mcp`, which initializes the built stdio server
+and checks package metadata and both tool names with network access disabled and no tenant credentials.
+`npm run cf:check` bundles the Worker without deploying. Keep live API and interactive Inspector checks separate.

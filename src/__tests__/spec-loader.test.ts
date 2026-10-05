@@ -61,7 +61,8 @@ describe('loadLocalSpec', () => {
     fetchMock.mockImplementation((url) => {
       const u = String(url);
       seen.push(u);
-      if (u.includes('v10.3.58')) return Promise.resolve(new Response('forbidden', { status: 403 }));
+      if (u.includes('v10.3.58'))
+        return Promise.resolve(new Response('forbidden', { status: 403 }));
       if (u.includes('v10.1.84')) return Promise.resolve(jsonResponse(MOCK_SPEC));
       return Promise.reject(new Error(`unexpected fetch: ${u}`));
     });

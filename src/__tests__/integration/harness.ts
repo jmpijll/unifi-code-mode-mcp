@@ -135,8 +135,7 @@ export async function setupHarness(opts: HarnessOptions): Promise<Harness> {
     ...(protectSpec ? { protectSpec } : {}),
     tenantResolver: () => {
       const ctx = requestStore.getStore();
-      if (!ctx)
-        throw new Error('No request context — header propagation broken in test harness');
+      if (!ctx) throw new Error('No request context — header propagation broken in test harness');
       return buildContextFromHeaders(ctx.headers);
     },
   });
@@ -158,10 +157,7 @@ export async function setupHarness(opts: HarnessOptions): Promise<Harness> {
     requestInit: { headers },
   });
 
-  const client = new Client(
-    { name: 'integration-client', version: '0.0.0' },
-    { capabilities: {} },
-  );
+  const client = new Client({ name: 'integration-client', version: '0.0.0' }, { capabilities: {} });
   await client.connect(clientTransport);
 
   return {
@@ -171,16 +167,24 @@ export async function setupHarness(opts: HarnessOptions): Promise<Harness> {
       await client.close();
       await serverTransport.close();
       await server.close();
-      await new Promise<void>((resolve) => httpServer.close(() => { resolve(); }));
+      await new Promise<void>((resolve) =>
+        httpServer.close(() => {
+          resolve();
+        }),
+      );
       await controller.close();
     },
   };
 }
 
 /** Helper that flattens a tool result's content into one string for assertions. */
-export function toolResultText(result: { content: Array<{ type: string; text?: string }> }): string {
+export function toolResultText(result: {
+  content: Array<{ type: string; text?: string }>;
+}): string {
   return result.content
-    .filter((p): p is { type: 'text'; text: string } => p.type === 'text' && typeof p.text === 'string')
+    .filter(
+      (p): p is { type: 'text'; text: string } => p.type === 'text' && typeof p.text === 'string',
+    )
     .map((p) => p.text)
     .join('\n---\n');
 }

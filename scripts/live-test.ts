@@ -32,18 +32,14 @@ import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createLocalClient } from '../src/client/local.js';
-import {
-  createCloudClient,
-  createCloudNetworkProxyClient,
-} from '../src/client/cloud.js';
+import { createCloudClient, createCloudNetworkProxyClient } from '../src/client/cloud.js';
 import { loadLocalSpec, loadCloudSpec } from '../src/spec/loader.js';
 import { specSummary } from '../src/spec/index.js';
 import { ExecuteExecutor } from '../src/sandbox/execute-executor.js';
 import { buildContextFromEnv } from '../src/tenant/context.js';
 
 const OP_LOCAL_REF = process.env['OP_LOCAL_REF'] ?? 'op://Personal/UniFi MCP/credential';
-const OP_CLOUD_REF =
-  process.env['OP_CLOUD_REF'] ?? 'op://Personal/UniFi Site Manager/credential';
+const OP_CLOUD_REF = process.env['OP_CLOUD_REF'] ?? 'op://Personal/UniFi Site Manager/credential';
 
 interface LocalCreds {
   baseUrl: string;
@@ -103,8 +99,7 @@ function readCloudOnePassword(): CloudCreds | undefined {
   const apiKey = safeOpRead(OP_CLOUD_REF);
   if (!apiKey) return undefined;
   const consoleId =
-    process.env['UNIFI_CLOUD_CONSOLE_ID'] ??
-    safeOpRead(`${parentRef(OP_CLOUD_REF)}/consoleId`);
+    process.env['UNIFI_CLOUD_CONSOLE_ID'] ?? safeOpRead(`${parentRef(OP_CLOUD_REF)}/consoleId`);
   return { apiKey, consoleId };
 }
 
@@ -131,7 +126,9 @@ async function probeLocal(creds: LocalCreds): Promise<void> {
     `[live] LOCAL  target=${creds.baseUrl} insecure=${String(Boolean(creds.insecure))} caCert=${creds.caCert ? 'present' : 'none'}`,
   );
   const client = createLocalClient(creds, {
-    onWarn: (msg) => { console.error(`[live][warn] ${msg}`); },
+    onWarn: (msg) => {
+      console.error(`[live][warn] ${msg}`);
+    },
   });
 
   console.error('[live] GET /v1/info …');
@@ -168,9 +165,7 @@ async function probeLocal(creds: LocalCreds): Promise<void> {
 
 async function probeCloud(creds: CloudCreds): Promise<void> {
   console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.error(
-    `[live] CLOUD  target=https://api.ui.com consoleId=${creds.consoleId ?? '(none)'}`,
-  );
+  console.error(`[live] CLOUD  target=https://api.ui.com consoleId=${creds.consoleId ?? '(none)'}`);
   const client = createCloudClient({
     baseUrl: 'https://api.ui.com',
     apiKey: creds.apiKey,

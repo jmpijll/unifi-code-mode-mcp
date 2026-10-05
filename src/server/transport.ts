@@ -48,7 +48,10 @@ export async function startStdioTransport(server: McpServer, logger: Logger): Pr
 
 class RateLimiter {
   private readonly windows: Map<string, number[]> = new Map();
-  constructor(private readonly windowMs: number, private readonly maxRequests: number) {}
+  constructor(
+    private readonly windowMs: number,
+    private readonly maxRequests: number,
+  ) {}
 
   allow(ip: string): boolean {
     const now = Date.now();
@@ -109,7 +112,9 @@ export async function startHttpTransport(
   };
 
   const rateLimiter = new RateLimiter(60_000, config.rateLimitPerMinute ?? 60);
-  const cleanupInterval = setInterval(() => { rateLimiter.cleanup(); }, 300_000);
+  const cleanupInterval = setInterval(() => {
+    rateLimiter.cleanup();
+  }, 300_000);
   cleanupInterval.unref();
 
   await server.connect(transport);

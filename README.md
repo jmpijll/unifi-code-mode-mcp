@@ -106,11 +106,11 @@ for vulnerability reporting.
 
 ```bash
 npm run check
-npm run format:check
 ```
 
-`check` runs lint, typecheck, mocked tests and the build. Formatting is checked separately;
-existing formatter drift is reported in PR validation. See [CONTRIBUTING.md](CONTRIBUTING.md)
+`check` runs lint, formatting, typecheck, mocked tests and the build.
+It also verifies the built MCP server version and its two tools without tenant credentials
+or upstream network access. `npm run cf:check` validates the Worker bundle without deploying it. See [CONTRIBUTING.md](CONTRIBUTING.md)
 for the repository layout and contribution checks, and [AGENTS.md](AGENTS.md) for
 architectural invariants. Live API tests require separate credentials and verification scope.
 

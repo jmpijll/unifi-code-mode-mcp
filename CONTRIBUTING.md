@@ -55,9 +55,7 @@ Quality gates that have to pass before a PR merges:
 - `npm test` — 105/105 (or more, with your additions)
 - `npm run build` — clean
 
-We tolerate `npm run format:check` warnings on pre-existing files (the
-codebase has some Prettier drift we haven't combed out); please don't
-"fix" them in the same PR as a feature change — keep diffs focused.
+Formatting is a required gate. Run `npm run format` to fix it and `npm run check` to verify the full local suite.
 
 ## What good PRs look like
 
@@ -109,8 +107,15 @@ By contributing, you agree your contribution is licensed under the same
 
 - Use Node.js 22.19+; the lockfile dependencies require this baseline.
 - Install with `npm ci`; `.npmrc` keeps the resolver policy consistent in local, CI and Docker builds.
-- Run `npm run check` before opening a PR: lint, typecheck, mocked tests and build.
-- Run `npm run format:check` separately and report existing drift. CI reports formatting without blocking unrelated changes.
+- Run `npm run check` before opening a PR: lint, formatting, typecheck, mocked tests and build.
+- Formatting is enforced by `npm run check`; use `npm run format` to apply the shared style.
 - Keep text files in LF format (`.gitattributes`).
 - Keep service-specific API semantics, tool names and sandbox bridges compatible.
 - Record live checks separately from mocked tests; never infer new client or upstream coverage from CI.
+
+## Offline and Worker checks
+
+`npm run smoke:mcp` checks the built stdio server name, package version and two tool names.
+It is included in `npm run check`, blocks upstream network access and does not forward tenant credentials.
+Run `npm run cf:check` after Worker changes; it bundles without deploying.
+Live API and interactive Inspector checks remain separate and require deliberate credentials.

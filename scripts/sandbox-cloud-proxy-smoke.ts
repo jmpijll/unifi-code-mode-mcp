@@ -32,8 +32,7 @@ async function main(): Promise<void> {
 
   const cloudClient = createCloudClient({ baseUrl: 'https://api.ui.com', apiKey });
 
-  const consoleId =
-    process.env['UNIFI_CLOUD_CONSOLE_ID'] ?? (await discoverConsoleId(cloudClient));
+  const consoleId = process.env['UNIFI_CLOUD_CONSOLE_ID'] ?? (await discoverConsoleId(cloudClient));
   if (!consoleId) throw new Error('Could not determine consoleId from /v1/hosts');
   console.error(`[smoke] consoleId=${consoleId}`);
 
@@ -105,7 +104,9 @@ async function main(): Promise<void> {
   if (!result.ok) process.exit(1);
 }
 
-async function discoverConsoleId(client: ReturnType<typeof createCloudClient>): Promise<string | undefined> {
+async function discoverConsoleId(
+  client: ReturnType<typeof createCloudClient>,
+): Promise<string | undefined> {
   const res = await client.request<{ data?: Array<{ id?: string }> }>({
     method: 'GET',
     path: '/v1/hosts',
