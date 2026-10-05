@@ -138,11 +138,7 @@ export function setupConsole(context: QuickJSContext, logs: LogEntry[]): void {
   consoleObj.dispose();
 }
 
-export function injectJsonValue(
-  context: QuickJSContext,
-  globalName: string,
-  value: unknown,
-): void {
+export function injectJsonValue(context: QuickJSContext, globalName: string, value: unknown): void {
   const json = JSON.stringify(value);
   const result = context.evalCode(`(${json})`);
   if (result.error) {

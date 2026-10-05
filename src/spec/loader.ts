@@ -240,9 +240,7 @@ export async function loadCloudSpec(opts: LoadCloudSpecOptions): Promise<Process
  *   5. The bundled curated fragment at src/spec/protect-fallback.json
  *      (last-resort offline fallback).
  */
-export async function loadProtectSpec(
-  opts: LoadProtectSpecOptions,
-): Promise<ProcessedSpec> {
+export async function loadProtectSpec(opts: LoadProtectSpecOptions): Promise<ProcessedSpec> {
   await mkdir(opts.cacheDir, { recursive: true });
 
   const onWarn = opts.onWarn ?? (() => undefined);
@@ -257,11 +255,7 @@ export async function loadProtectSpec(
     const isCloudBase = /(^|\/\/)api\.ui\.com(\/|$)/i.test(opts.baseUrl);
     if (!isCloudBase) {
       try {
-        discoveredVersion = await fetchProtectAppVersion(
-          opts.baseUrl,
-          opts.apiKey,
-          dispatcher,
-        );
+        discoveredVersion = await fetchProtectAppVersion(opts.baseUrl, opts.apiKey, dispatcher);
       } catch (err) {
         onWarn(
           `Could not discover Protect version from ${opts.baseUrl}: ` +
@@ -451,7 +445,9 @@ async function fetchProtectAppVersion(
   const body = (await res.json()) as Record<string, unknown>;
   const version = body['applicationVersion'] ?? body['version'];
   if (typeof version !== 'string' || version.length === 0) {
-    throw new Error(`Protect /v1/meta/info returned no application version: ${JSON.stringify(body)}`);
+    throw new Error(
+      `Protect /v1/meta/info returned no application version: ${JSON.stringify(body)}`,
+    );
   }
   return version;
 }

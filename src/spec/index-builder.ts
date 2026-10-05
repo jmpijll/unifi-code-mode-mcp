@@ -59,10 +59,7 @@ function buildOperation(
   const summary = op.summary ?? '';
   const description = (op.description ?? '').slice(0, MAX_DESCRIPTION_LENGTH);
 
-  const allParams: ParameterObject[] = [
-    ...pathLevelParams,
-    ...(op.parameters ?? []),
-  ];
+  const allParams: ParameterObject[] = [...pathLevelParams, ...(op.parameters ?? [])];
 
   const parameters = allParams.map((p) => ({
     name: p.name,

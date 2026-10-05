@@ -37,7 +37,11 @@ interface ToolContent {
   isError?: boolean;
 }
 
-async function callTool(harness: Harness, name: 'search' | 'execute', code: string): Promise<ToolContent> {
+async function callTool(
+  harness: Harness,
+  name: 'search' | 'execute',
+  code: string,
+): Promise<ToolContent> {
   return (await harness.client.callTool({ name, arguments: { code } })) as ToolContent;
 }
 
@@ -103,7 +107,9 @@ describe.each(TRANSPORT_MODES)('integration (%s transport)', (mode) => {
     expect(text).toContain('"wans": 2');
     expect(text).toContain('zone-based-firewall-not-configured');
 
-    const calls = harness.controller.requests.map((r) => `${r.method} ${r.path.split('?')[0] ?? ''}`);
+    const calls = harness.controller.requests.map(
+      (r) => `${r.method} ${r.path.split('?')[0] ?? ''}`,
+    );
     expect(calls).toContain('GET /proxy/network/integration/v1/sites');
     expect(calls).toContain(`GET /proxy/network/integration/v1/sites/${SITE_ID}/devices`);
     expect(calls).toContain(`GET /proxy/network/integration/v1/sites/${SITE_ID}/wifi/broadcasts`);
@@ -119,7 +125,9 @@ describe.each(TRANSPORT_MODES)('integration (%s transport)', (mode) => {
       `searchOperations('local', 'wifi', 5).map(function (o) { return o.method + ' ' + o.path; })`,
     );
     expect(search.isError).toBeFalsy();
-    expect(toolResultText(search)).toContain('PUT /v1/sites/{siteId}/wifi/broadcasts/{wifiBroadcastId}');
+    expect(toolResultText(search)).toContain(
+      'PUT /v1/sites/{siteId}/wifi/broadcasts/{wifiBroadcastId}',
+    );
 
     const code = `
       var current = unifi.local.callOperation('getWifiBroadcastDetails', {
@@ -186,9 +194,7 @@ describe.each(TRANSPORT_MODES)('integration (%s transport)', (mode) => {
     );
     expect(calls).toContain('GET /proxy/protect/integration/v1/meta/info');
     expect(calls).toContain('GET /proxy/protect/integration/v1/cameras');
-    expect(calls).toContain(
-      `GET /proxy/protect/integration/v1/cameras/${PROTECT_CAMERA_FRONT_ID}`,
-    );
+    expect(calls).toContain(`GET /proxy/protect/integration/v1/cameras/${PROTECT_CAMERA_FRONT_ID}`);
   });
 
   // ─── Scenario C — intentionally impossible ────────────────────────
@@ -207,7 +213,9 @@ describe.each(TRANSPORT_MODES)('integration (%s transport)', (mode) => {
     expect(exec.isError).toBeFalsy();
     const text = toolResultText(exec);
     expect(text).toContain('"caught"');
-    expect(text.toLowerCase()).toMatch(/unknown operation|operation not found|no such operation|totallymadeupoperation/);
+    expect(text.toLowerCase()).toMatch(
+      /unknown operation|operation not found|no such operation|totallymadeupoperation/,
+    );
   });
 });
 
@@ -239,7 +247,9 @@ describe('integration (http transport — header propagation)', () => {
         arguments: { code: `unifi.local.callOperation('getSiteOverviewPage', { pageSize: 1 })` },
       })) as ToolContent;
       expect(exec.isError).toBeTruthy();
-      expect(toolResultText(exec).toLowerCase()).toMatch(/x-unifi-local-base-url|base url|missingcredentials/i);
+      expect(toolResultText(exec).toLowerCase()).toMatch(
+        /x-unifi-local-base-url|base url|missingcredentials/i,
+      );
     } finally {
       await harness.cleanup();
     }

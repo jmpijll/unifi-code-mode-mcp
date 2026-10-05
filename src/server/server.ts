@@ -1,3 +1,4 @@
+import { SERVER_VERSION } from '../version.js';
 /**
  * MCP Server — UniFi Code Mode
  *
@@ -138,7 +139,7 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
     limits,
     logger,
     name = 'unifi-code-mode-mcp',
-    version = '0.1.0',
+    version = SERVER_VERSION,
   } = options;
 
   const server = new McpServer(
@@ -186,7 +187,9 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
     async ({ code }) => {
       logger?.info(`[search] ${String(code.length)} chars`);
       if (code.length > MAX_CODE_SIZE) {
-        return errorResult(`Code too large (${String(code.length)} chars, max ${String(MAX_CODE_SIZE)}).`);
+        return errorResult(
+          `Code too large (${String(code.length)} chars, max ${String(MAX_CODE_SIZE)}).`,
+        );
       }
       try {
         const result = await searchExecutor.execute(code);
@@ -216,7 +219,9 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
     async ({ code }) => {
       logger?.info(`[execute] ${String(code.length)} chars`);
       if (code.length > MAX_CODE_SIZE) {
-        return errorResult(`Code too large (${String(code.length)} chars, max ${String(MAX_CODE_SIZE)}).`);
+        return errorResult(
+          `Code too large (${String(code.length)} chars, max ${String(MAX_CODE_SIZE)}).`,
+        );
       }
 
       let tenant: TenantContext;

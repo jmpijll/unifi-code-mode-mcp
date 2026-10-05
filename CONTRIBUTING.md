@@ -39,7 +39,7 @@ Don't open blank issues — they're disabled.
 ```bash
 git clone https://github.com/jmpijll/unifi-code-mode-mcp.git
 cd unifi-code-mode-mcp
-npm install
+npm ci
 cp .env.example .env
 # Set UNIFI_LOCAL_API_KEY / UNIFI_CLOUD_API_KEY as needed.
 npm run typecheck      # tsc --noEmit
@@ -55,9 +55,7 @@ Quality gates that have to pass before a PR merges:
 - `npm test` — 105/105 (or more, with your additions)
 - `npm run build` — clean
 
-We tolerate `npm run format:check` warnings on pre-existing files (the
-codebase has some Prettier drift we haven't combed out); please don't
-"fix" them in the same PR as a feature change — keep diffs focused.
+Formatting is a required gate. Run `npm run format` to fix it and `npm run check` to verify the full local suite.
 
 ## What good PRs look like
 
@@ -88,7 +86,7 @@ codebase has some Prettier drift we haven't combed out); please don't
 
 See `AGENTS.md` § 7 for the code-style cheat sheet. The big ones:
 
-- TypeScript strict, ESM, Node 20+.
+- TypeScript strict, ESM, Node 22.19+.
 - Avoid narrative comments — explain *why* of non-obvious decisions only.
 - Errors crossing the sandbox boundary go through the `formatXError`
   helpers and preserve the `[unifi.<surface>.<error-class>]` prefix.
@@ -103,3 +101,21 @@ because we're one person; if the project grows we'll adopt one.
 
 By contributing, you agree your contribution is licensed under the same
 [MIT license](LICENSE) as the rest of the project.
+
+
+## Shared repository conventions
+
+- Use Node.js 22.19+; the lockfile dependencies require this baseline.
+- Install with `npm ci`; `.npmrc` keeps the resolver policy consistent in local, CI and Docker builds.
+- Run `npm run check` before opening a PR: lint, formatting, typecheck, mocked tests and build.
+- Formatting is enforced by `npm run check`; use `npm run format` to apply the shared style.
+- Keep text files in LF format (`.gitattributes`).
+- Keep service-specific API semantics, tool names and sandbox bridges compatible.
+- Record live checks separately from mocked tests; never infer new client or upstream coverage from CI.
+
+## Offline and Worker checks
+
+`npm run smoke:mcp` checks the built stdio server name, package version and two tool names.
+It is included in `npm run check`, blocks upstream network access and does not forward tenant credentials.
+Run `npm run cf:check` after Worker changes; it bundles without deploying.
+Live API and interactive Inspector checks remain separate and require deliberate credentials.

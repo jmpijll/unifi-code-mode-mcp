@@ -1,206 +1,127 @@
-# UniFi Code-Mode MCP
+<p align="center">
+  <img src="docs/assets/hero.svg" alt="UniFi Code Mode MCP. Two tools. One API." width="100%">
+</p>
+
+<p align="center">
+  <strong>Explore your UniFi network through two MCP tools.</strong><br>
+  Query Network, Site Manager and Protect APIs from a sandboxed JavaScript session.
+</p>
+
+<p align="center">
+  <a href="#get-started">Get started</a> ·
+  <a href="#example-session">Example session</a> ·
+  <a href="#know-the-boundaries">Boundaries</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
+
+<p align="center">Node.js 22.19+ · Public beta · v0.2.0-beta.1 · MIT license</p>
 
 [![CI](https://github.com/jmpijll/unifi-code-mode-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jmpijll/unifi-code-mode-mcp/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)](#project-status)
-[![Version: v0.2.0-beta.1](https://img.shields.io/badge/version-v0.2.0--beta.1-blue.svg)](CHANGELOG.md)
 
-> ## Project status
->
-> **This is a public beta. Install from source. Not on npm yet.**
->
-> Five sandbox surfaces are wired and tested against an in-process mock
-> controller (105/105 unit + integration tests green). **Four of the
-> five surfaces are also verified live against a real UDM-Pro:**
-> `unifi.local.network` and `unifi.local.protect` (LAN-direct, Network
-> 10.3.58 + Protect 7.0.107) and `unifi.cloud.network()` and
-> `unifi.cloud.protect(consoleId)` (Site Manager connector path against
-> the same hardware). End-to-end LLM-mediated invocation is verified
-> through three independent paths: `cursor-agent` interactive PTY
-> (Claude Sonnet 4.6, cloud surface), `opencode` (DeepSeek v4 Flash,
-> cloud surface), and `opencode` (DeepSeek v4 Flash, **LAN-direct
-> Network surface**). Protect mutation is verified through one
-> round-trip (`PATCH /v1/cameras/{id}` rename + revert) and the MCP
-> Inspector CLI is verified end-to-end. Network mutations, LLM-mediated
-> LAN-direct **Protect** invocation, binary Protect endpoints
-> (snapshots, RTSPS, talk-back, WebSockets), the Inspector UI mode, and
-> every other agent platform (Claude Code, Claude Desktop, VS Code +
-> Copilot, Codex CLI, Continue, Cline, Aider, Zed, …) are wired but
-> **NOT verified by us**. We need testers — please file
-> [verification reports](.github/ISSUE_TEMPLATE/verification_report.yml)
-> and [bug reports](.github/ISSUE_TEMPLATE/bug_report.yml) with whatever
-> you find. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the rules and
-> [`examples/unifi-expert-agent/`](examples/unifi-expert-agent/) for a
-> ready-made persona + cross-platform install snippets.
+## Two tools, one API
 
-A Model Context Protocol (MCP) server for the **Ubiquiti UniFi Network Integration API** and the **UniFi Site Manager (cloud) API**, built on the **Cloudflare "Code Mode" pattern**: instead of one MCP tool per endpoint, the server exposes **two tools** — `search` and `execute` — and the LLM writes JavaScript that runs in a QuickJS WASM sandbox. This keeps the LLM context small (~constant) regardless of how big the underlying API is.
+This [Model Context Protocol](https://modelcontextprotocol.io/) server exposes `search` and `execute`.
+The agent searches the API reference, then runs JavaScript inside a QuickJS WASM sandbox.
+API calls go through the host; credentials remain outside the sandbox.
 
-## Why Code Mode?
+- **Search three API specs.** Network, Site Manager and Protect.
+- **Choose your route.** Local controller access or cloud connector access by console ID.
+- **Use the same server in both modes.** Stdio with environment credentials; HTTP with per-request tenant headers.
+- **Inspect errors.** Upstream errors retain the surface and operation context.
 
-The UniFi Network Integration API has **70+ endpoints**. Exposing each as a separate MCP tool floods the LLM context with thousands of tokens before it has even read the user's question. Code Mode collapses the entire API surface into two tools and lets the model search the OpenAPI spec, then execute calls programmatically — including loops, batching, and post-processing. See Cloudflare's [Code Mode for MCP](https://blog.cloudflare.com/code-mode-mcp/) blog post and the official `@cloudflare/codemode` package.
+## Get started
 
-## Highlights
+Install from source and point your MCP client at the built `dist/index.js`.
 
-- **Cloudflare Code Mode compatible** — two-tool design (`search` + `execute`), Cloudflare-style sandbox semantics
-- **Five API surfaces in one server** —
-  - `unifi.local.*` — direct Network Integration API on a controller you can reach over the LAN
-  - `unifi.cloud.*` — Site Manager native endpoints (Hosts, Sites, Devices, ISP Metrics, SD-WAN)
-  - `unifi.cloud.network(consoleId).*` — full Network Integration API, **proxied through `api.ui.com`** so a single Site Manager API key drives any console without exposing the controller publicly
-  - `unifi.local.protect.*` — UniFi Protect Integration API (cameras + PTZ, NVRs, sensors, lights, chimes, viewers, live-views) — official spec auto-loaded from `apidoc-cdn.ui.com/protect/v<version>/integration.json`; bundled curated fallback ships ~18 JSON-over-HTTP ops for offline use
-  - `unifi.cloud.protect(consoleId).*` — Protect Integration API tunneled through the Site Manager connector at `/v1/connector/consoles/{id}/proxy/protect/integration`. URL pattern is officially documented by Ubiquiti (`developer.ui.com/protect/v7.0.107/...`, "Remote" base-URL selector)
-- **Single-user (env) and multi-user (per-request HTTP headers)** — the same server runs as a private homelab tool or a hosted multi-tenant gateway
-- **QuickJS WASM sandbox** — memory, CPU, time, and call-budget limits; credentials never enter the sandbox
-- **Dynamic OpenAPI loading** — the controller's app version is auto-discovered (`GET /v1/info`); the spec is fetched from `apidoc-cdn.ui.com` and cached on disk
-- **Hybrid deployment** — runs on Node.js (stdio + Streamable HTTP) or Cloudflare Workers (using `@cloudflare/codemode` + Worker Loader)
-- **TLS done right** — strict by default, per-tenant custom CA cert, optional opt-in to insecure (with loud warnings)
+### Requirements
 
-## For agents driving this server
+- Node.js **22.19.0 or newer** and npm. CI checks Node 22 and 24.
+- A UniFi API key for your local controller or Site Manager.
 
-If you're an LLM agent (or a human configuring one) connecting to a running instance, read [`SKILL.md`](SKILL.md) for the operating manual — the `search → execute` loop, the five sandbox surfaces, the error taxonomy, and ready-to-paste recipes. For Cursor IDE / Cursor CLI specifically, see [`docs/cursor-skill.md`](docs/cursor-skill.md); for opencode see [`docs/opencode-skill.md`](docs/opencode-skill.md).
-
-**For testers**, [`examples/unifi-expert-agent/`](examples/unifi-expert-agent/) ships a ready-made "UniFi network engineering expert" persona, a focused operating manual, [cross-platform install snippets](examples/unifi-expert-agent/install.md) (Cursor, opencode, Claude Code, Claude Desktop, VS Code + Copilot, Codex CLI, Continue, Cline, MCP Inspector, …), and [sample prompts](examples/unifi-expert-agent/SAMPLE_PROMPTS.md) you can run against the persona. We need verification reports — see the [project status](#project-status) callout above.
-
-## Quickstart (single-user)
+### Build from source
 
 ```bash
 git clone https://github.com/jmpijll/unifi-code-mode-mcp.git
 cd unifi-code-mode-mcp
-npm install
+npm ci
 cp .env.example .env
-# Edit .env: set UNIFI_LOCAL_BASE_URL and UNIFI_LOCAL_API_KEY
+# Edit .env: UNIFI_LOCAL_BASE_URL and UNIFI_LOCAL_API_KEY, or UNIFI_CLOUD_API_KEY.
 npm run build
-npm start                # MCP_TRANSPORT=stdio
+npm start
 ```
 
-Then point your MCP client at `node /path/to/unifi-code-mode-mcp/dist/index.js`.
+The shell examples use Bash. In PowerShell, use `Copy-Item .env.example .env` and
+set variables with `$env:NAME = 'value'`.
 
-## Quickstart (multi-user / HTTP)
+Configure your MCP client with `node /absolute/path/to/unifi-code-mode-mcp/dist/index.js`.
+Use an absolute path and supply credentials through the client's environment configuration
+when its working directory does not contain your `.env` file.
+See the [client setup and usage guide](docs/usage.md).
 
-```bash
-MCP_TRANSPORT=http npm start
-```
-
-Each MCP client request must include credentials as headers:
-
-```http
-POST /mcp HTTP/1.1
-X-Unifi-Local-Api-Key: <controller key>
-X-Unifi-Local-Base-Url: https://192.168.1.1
-X-Unifi-Local-Insecure: true
-X-Unifi-Cloud-Api-Key: <site manager key>
-```
-
-See [docs/multi-tenant.md](docs/multi-tenant.md).
+For hosted use, set `MCP_TRANSPORT=http` and follow the [per-request credential contract](docs/multi-tenant.md).
+Docker instructions are in [docker-compose.yml](docker-compose.yml).
 
 ## Example session
 
-The model first searches the spec:
+After discovering the operation with the search tool, use the execute tool:
 
-```js
-// search tool
-spec.local.operations
-  .filter((op) => op.tags.includes('Sites') && op.method === 'GET')
-  .map((op) => ({ id: op.operationId, path: op.path }));
-```
-
-Then executes calls:
-
-```js
-// execute tool — direct local
+```javascript
 var sites = unifi.local.sites.listSites({ limit: 200 });
-sites.data.map(function (s) { return { id: s.id, name: s.name }; });
+sites.data.map(function (site) { return { id: site.id, name: site.name }; });
 ```
 
-Or, if you only have a Site Manager API key and want remote access without exposing the controller to the internet:
+See the [usage guide](docs/usage.md) for search recipes, configuration and additional call shapes.
 
-```js
-// execute tool — Network API proxied through api.ui.com
-var net = unifi.cloud.network('CONSOLE-ID-FROM-UNIFI-UI-COM');
-var sites = net.sites.listSites({ limit: 200 });
-sites.data.length;
-```
+## Know the boundaries
 
-If the controller is also running Protect, the same code shape works against the Protect surface:
-
-```js
-// execute tool — local Protect (camera count, NVR list)
-var meta = unifi.local.protect.callOperation('getProtectMetaInfo', {});
-var cameras = unifi.local.protect.cameras.listCameras({});
-({ protectVersion: meta.applicationVersion, cameras: cameras.data.length });
-```
-
-## Status
-
-Pre-1.0. The Network Integration API spec is loaded dynamically from Ubiquiti's CDN; the server should adapt to controller version changes without code edits.
+| Area | Current boundary |
+| --- | --- |
+| API coverage | Integration APIs only; legacy configuration and binary/streaming Protect operations are outside the JSON client surface. |
+| Mutations | A Protect camera rename/revert was historically verified; Network mutations need further validation. |
+| Workers | Scaffold; full transport parity with Node is not implemented. |
+| Sandbox | Resource limits bound each invocation; allowed API calls still act with the supplied account's permissions. |
 
 ### Verification status
 
-What we have **directly verified** so far:
+Earlier maintainer runs cover local/cloud Network and Protect, a camera rename/revert, and selected CLI clients. Other clients, hosted multi-tenancy and sustained-load behavior remain unverified.
+See the [setup and verification reference](docs/usage.md#setup-and-verification-reference)
+for the detailed historical evidence and remaining work. New verification reports should
+identify the server revision, client, upstream version and operations actually exercised.
 
-| Layer | How | Result |
-|---|---|---|
-| Unit tests | Vitest, 105 specs across spec loader, dispatcher, sandbox, server, tag normalisation, Protect surfaces | ✅ all green |
-| Integration tests (in-process MCP transport) | `InMemoryTransport` against `createMcpServer` + a mock UniFi controller (Network + Protect) | ✅ green |
-| Integration tests (real Streamable HTTP transport) | `StreamableHTTPClientTransport` over a real HTTP listener | ✅ green |
-| Protect surface against a mock controller | `unifi.local.protect.*` end-to-end via the integration harness with the bundled fallback spec | ✅ green (see Scenario D in `src/__tests__/integration/scenarios.test.ts`) |
-| Live read-only sweep on a real Network (cloud) | `scripts/discover-network.ts` against a real UDM-Pro via `unifi.cloud.network()` | ✅ produced 28 KB JSON snapshot, plus HLD/LLD/best-practices Markdown |
-| Live read-only sweep of cloud-Protect | `scripts/discover-protect.ts` against a real UDM-Pro running Protect 7.0.107 via `unifi.cloud.protect(consoleId)` | ✅ official OpenAPI loaded from `apidoc-cdn.ui.com/protect/v7.0.107/integration.json` (35 ops); `getProtectMetaInfo` returned `applicationVersion: "7.0.107"`; `listCameras` returned 4 cameras with name/state. Sanitized transcript at `out/verification/cloud-protect-live-smoke.txt` |
-| **Live read-only sweep of LAN-direct Network** | `scripts/discover-local.ts` against the same UDM-Pro running Network 10.3.58 via `unifi.local.*` | ✅ Network 10.1.84 spec resolved (67 ops); 1 site / 5 devices (UDM-Pro + 4 access points) / 2 WAN / 2 Wi-Fi / 32 wireless clients enumerated through 10 sandbox host calls in 608 ms. Sanitized transcript at `out/verification/local-network-live-smoke.txt` |
-| **Live read-only sweep of LAN-direct Protect** | `scripts/discover-local.ts` against the same UDM-Pro running Protect 7.0.107 via `unifi.local.protect.*` | ✅ official Protect 7.0.107 spec resolved (35 ops); 4 cameras with full metadata returned in 162 ms; identical results to the cloud-Protect run on the same hardware (cross-confirms the wire path). Sanitized transcript at `out/verification/local-protect-live-smoke.txt` |
-| **Live mutation round-trip on Protect** | `scripts/verify-mutations.ts` against the same UDM-Pro: `PATCH /v1/cameras/{id}` to rename a DISCONNECTED camera, GET-verify, `PATCH` revert, GET-verify | ✅ rename → verify → revert → verify in 3 sequential `ExecuteExecutor` invocations (6 sandbox host calls total). Pre-flight refuses to run on non-DISCONNECTED cameras or stale-test names; revert runs in a separate executor invocation with fatal exit codes if it fails. Sanitized transcript at `out/verification/mutation-live-smoke.txt` |
-| `cursor-agent mcp list-tools unifi` (protocol smoke) | local CLI, no LLM | ✅ both `search` and `execute` exposed |
-| **MCP Inspector (CLI mode)** | `@modelcontextprotocol/inspector@0.20.0 --cli --transport stdio` against the live UDM-Pro at 172.27.1.1 | ✅ all four phases pass: `tools/list` returns both tools with full descriptors; credential-free `execute` returns the surface inventory; credentialled `search` returns live operations including the freshly compacted `aclRules` tag; credentialled `execute` returns live site count `1`. Sanitized transcript at `out/verification/mcp-inspector-live-smoke.txt` |
-| End-to-end LLM-mediated invocation via cursor-agent | Claude Sonnet 4.6 driving the server through `cursor-agent` in interactive PTY mode | ✅ JSON-RPC roundtrip, correct value returned (see `out/verification/cursor-agent-sonnet-mcp-call.txt`) |
-| End-to-end LLM-mediated invocation via opencode (cloud surface) | DeepSeek v4 Flash via `opencode-go` provider, project-scoped `opencode.json`, opencode v1.14.30 | ✅ MCP tools auto-injected as `unifi_search` / `unifi_execute`, model called `unifi_search` with the right code, server returned `"9"`, model echoed it (see `out/verification/opencode-deepseek-mcp-call.txt`) |
-| **End-to-end LLM-mediated invocation via opencode (LAN-direct Network)** | DeepSeek v4 Flash driving `unifi.local.*` against the same UDM-Pro at 172.27.1.1 | ✅ Model used `unifi_search` to find `getSiteOverviewPage`, then `unifi_execute` to call it through the LAN-direct path; server returned site count `1` (matches `discover-local.ts`); model echoed it. Self-corrected through 4 syntax attempts using the documented error-shape contract (top-level `return` / `await` are not allowed in QuickJS — see `out/verification/opencode-deepseek-local-mcp-call.txt`) |
-| **End-to-end LLM-mediated invocation via opencode (LAN-direct Protect)** | DeepSeek v4 Flash driving `unifi.local.protect.*` against the same UDM-Pro at 172.27.1.1 | ✅ Single-call success: model invoked `unifi_execute` with the async-IIFE `listCameras` recipe and returned `count=4 names=Daisy,Cnc,Voordeur,Tuin` — same camera array as `discover-local.ts` and the cloud-Protect run on the same hardware. Sanitized transcript at `out/verification/opencode-deepseek-local-protect-mcp-call.txt` |
-| **Second live mutation round-trip on Protect — RTSPS stream toggle** | `scripts/verify-mutations-rtsps.ts`: `DELETE /v1/cameras/{id}/rtsps-stream?qualities=high` → GET-verify all-null → `POST /v1/cameras/{id}/rtsps-stream` body `{qualities:['high']}` → GET-verify high re-enabled (with rotated token) | ✅ Self-reverting DELETE+POST pattern works against `unifi.local.protect.*`, confirms `buildQueryString()` array serialisation. Sanitized transcript at `out/verification/mutation-rtsps-live-smoke.txt` |
-| **MCP Inspector (UI / browser mode)** | `@modelcontextprotocol/inspector@0.20.0` browser UI driven via headless Chromium. Connect → List Tools → select `execute` → run `getSiteOverviewPage` one-liner | ✅ Connect succeeded; both tools listed with full descriptors; `execute` returned `Tool Result: Success` with live site count; History pane recorded `initialize` → `tools/list` → `tools/call`. Transcript + two screenshots at `out/verification/mcp-inspector-ui-*` |
-| **Claude Code CLI (handshake-level)** | `claude mcp add unifi --transport stdio …` then `claude mcp list` then `claude mcp get unifi` | ✅ `✓ Connected` from Claude Code v2.0.47's bundled MCP client; full descriptor returned by `claude mcp get`. End-to-end LLM call through `claude --print` blocked by client-side Claude auth (no API key in env), documented as a tester recipe. Sanitized transcript at `out/verification/claude-code-cli-mcp-handshake.txt` |
-| **Cloudflare Workers — `wrangler dev` parity smoke** | `npm run cf:dev` (Miniflare) + curl probes against `/health`, `/mcp`, unknown paths | ✅ Worker boots; `/health` → `{"status":"ok","namespace":"local"}`; `/mcp` without creds → 401 with documented missing-header message; `/mcp` with creds → 502 spec-load failure (expected for stub baseUrl). The 501 transport-adapter scaffold is documented and unreachable without real creds + a publicly-trusted controller. Sanitized transcript at `out/verification/cf-worker-parity-smoke.txt` |
+### Project status
 
-What is **not yet verified** (and where help is welcome):
+Public beta · v0.2.0-beta.1. Install from source; the package remains private and is not published to npm.
 
-- Cursor IDE chat panel after a fresh window restart (project-scoped `.cursor/mcp.json` registration).
-- Other agent / IDE clients beyond cursor-agent, opencode, MCP Inspector (CLI + UI), and Claude Code CLI handshake: Claude Desktop, VS Code + Copilot, Continue, Codeium, Aider, Zed, Cline, etc.
-- **End-to-end LLM-mediated invocation through Claude Code CLI.** The MCP register + connect handshake is verified (Claude Code's bundled MCP client reports `✓ Connected`), but driving a full prompt → `unifi_execute` → response loop through `claude --print` requires `ANTHROPIC_API_KEY` (or interactive auth) which our verification environment didn't have. Tester recipe in `out/verification/claude-code-cli-mcp-handshake.txt`.
-- HTTP / SSE transports inside the MCP Inspector — only stdio is live-verified through both CLI and UI.
-- Hosted/multi-tenant deployment of the Streamable HTTP transport behind a reverse proxy.
-- Long-running soak / stability under sustained load.
-- Real UniFi networks other than the one author's homelab — we cannot generalise resilience claims from a single network.
-- More than one model per verified client (only one model has been driven end-to-end against each: Sonnet 4.6 on cursor-agent, DeepSeek v4 Flash on opencode for cloud + LAN-direct Network + LAN-direct Protect).
-- **Network mutation verification.** The two Protect mutation round-trips (`PATCH /v1/cameras/{id}` rename + revert; DELETE+POST RTSPS-stream toggle) are live-verified, but every Network create endpoint exposed in this controller's spec (`createAclRule`, `createDnsPolicy`, `createNetwork`, `createWifiBroadcast`, `createTrafficMatchingList`, `createFirewallZone`, `createFirewallPolicy`, `createVouchers`) requires a polymorphic discriminator (`$.type`, `$.management`, …) that the loaded OpenAPI spec does **not** currently expose to the synthesizer; probing them blindly against live hardware is unsafe. A future loader pass needs to extract polymorphic-discriminator enums (or we ship known-good fixture bodies per controller version).
-- **PTZ Protect mutations** (`POST /v1/cameras/{id}/ptz/goto/{slot}` and the patrol start/stop pair). None of the four cameras in the maintainer's homelab is PTZ-capable (`featurePtz === false` on all four), so this is homelab-blocked rather than wiring-broken. Verification deferred to a contributor with PTZ hardware.
-- **Alarm-manager webhook trigger** (`POST /v1/alarm-manager/webhook/{id}`). Requires an alarm pre-configured in the Protect UI with the matching ID; the homelab has none, so the operation is a no-op against this controller. Verification deferred to a contributor with alarm-managed Protect.
-- **`disableCameraMicPermanently`** is wired but intentionally unverified — irreversible per its name; we won't drive it against any controller.
-- **Binary / streaming Protect surfaces.** Snapshots (`/snapshot`), RTSPS streams (`/rtsps-stream`), talk-back sessions (`/talkback-session`), and the WebSocket `subscribe/*` endpoints are all on the Protect spec but the JSON-only `HttpClient` doesn't speak them yet.
-- **Cloudflare Workers full transport.** `wrangler dev` parity smoke verified the routing, auth-header validation, spec-loader, and 404/401/502 paths all work; the 501 transport-adapter scaffold and the `worker_loaders` `LOADER` binding (requires wrangler v4) remain unimplemented and unreached. See `cf-worker/README.md` for the open work.
+## Privacy
 
-Two client-specific subtleties worth calling out:
+The host sends API requests to the service configured for this server. Tool results and
+captured sandbox logs are returned to your MCP client; that client may send them to its
+configured model provider. Spec caches may be written locally.
 
-- **cursor-agent v2026.05.05** does *not* inject custom MCPs as model-callable tools in either `--print` or interactive mode, even when `cursor-agent mcp list` reports them as `ready`. Sufficiently capable models (Sonnet 4.6, Codex 5.3) work around this by reading `.cursor/mcp.json` themselves and driving the server over stdio; the result is correct but indirect. See `docs/cursor-skill.md` §8.
-- **opencode v1.14.30** *does* auto-inject MCP tools cleanly (under the `<server>_<tool>` name scheme). Two gotchas: (1) the bundled `plugin.copilot` provider has a Zod schema mismatch in 1.14.30 that hangs bootstrap when not using `--pure`; (2) opencode persists per-model variant settings (e.g. `variant: max`) across runs, so a previously-set "max reasoning" can silently turn an 8-second call into an 8-minute one. See `docs/opencode-skill.md`.
+Keep `.env` files and credentials private. Redact account identifiers, IP addresses and
+service data before sharing logs or verification reports. See [SECURITY.md](SECURITY.md)
+for vulnerability reporting.
 
-### Roadmap
+## Development and contribution
 
-- **Cross-spec polymorphic-discriminator extraction → Network mutation verification.** Every Network 10.3.58 create endpoint (`createAclRule`, `createDnsPolicy`, `createNetwork`, `createWifiBroadcast`, `createTrafficMatchingList`, `createFirewallZone`, `createFirewallPolicy`, `createVouchers`) returns `api.request.missing-type-id` because the loader doesn't currently expose the polymorphic discriminator enum to the synthesizer. Once that's wired, Network mutations can be live-verified the same way the Protect camera-rename round-trip was
-- **LLM-mediated invocation against the LAN-direct Protect surface.** `unifi.local.*` (Network) is now LLM-verified end-to-end via `opencode`; the equivalent against `unifi.local.protect.*` has not been recorded yet
-- **Other Protect mutations beyond camera-rename** — PTZ goto/patrol, alarm-manager webhook trigger, and the `rtsps-stream` enable/disable pair (skipping `disableCameraMicPermanently`, which is irreversible by name)
-- **Broaden the bundled fallback** beyond the current ~18 JSON-over-HTTP ops, or expose binary surfaces (snapshots, RTSPS metadata, files) once the sandbox supports them
-- **Protect WebSocket events** (`/v1/subscribe/events`, `/v1/subscribe/devices`) — currently out of scope
-- **Per-tenant rate limiting** keyed on hashed credentials (currently per-IP)
-- **Optional persistent spec cache** versioned by controller fingerprint (we already version by `CACHE_SCHEMA_VERSION` to invalidate on internal-shape changes; controller-version pinning is the next layer)
-- **Broader client validation** — confirmed working configs for Claude Desktop, Continue, Cline, Aider, Zed, the MCP Inspector UI mode, and HTTP/SSE transports for the Inspector
-- **NPM publish** — reserved for `1.0.0`. The package is `"private": true` until then.
+```bash
+npm run check
+```
+
+`check` runs lint, formatting, typecheck, mocked tests and the build.
+It also verifies the built MCP server version and its two tools without tenant credentials
+or upstream network access. `npm run cf:check` validates the Worker bundle without deploying it. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the repository layout and contribution checks, and [AGENTS.md](AGENTS.md) for
+architectural invariants. Live API tests require separate credentials and verification scope.
 
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) — How the server is built, request lifecycle, sandbox details
-- [docs/multi-tenant.md](docs/multi-tenant.md) — Header protocol, deployment patterns, security model
-- [docs/security.md](docs/security.md) — Threat model, credential handling, sandbox guarantees
-- [docs/deployment.md](docs/deployment.md) — Docker, Cloudflare Workers, systemd
-- [docs/usage.md](docs/usage.md) — Tool descriptions, common patterns, gotchas
+- [Usage and client setup](docs/usage.md)
+- [Architecture](docs/architecture.md)
+- [Agent operating manual](SKILL.md) and [example persona](examples/unifi-expert-agent/)
+- [Changelog](CHANGELOG.md)
 
-## License
+## License and acknowledgements
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE). Built with TypeScript, the MCP SDK and QuickJS, following the
+[Cloudflare Code Mode pattern](https://github.com/cloudflare/mcp-server-cloudflare).

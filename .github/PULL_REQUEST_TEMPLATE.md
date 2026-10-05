@@ -1,44 +1,16 @@
-<!--
-Thanks for the PR. Keep diffs focused — one concern per PR. Pre-existing
-Prettier drift on untouched lines is fine to leave alone.
--->
+## What changed
 
-## What
-
-<!-- One paragraph: what does this PR do? -->
-
-## Why
-
-<!-- Why is this needed? Cite an issue if there is one. -->
-
-Closes #
-
-## How
-
-<!-- Implementation notes a reviewer needs. Surface(s) touched, files
-that are load-bearing for the change. -->
+Describe the problem and resulting behavior. Link related issues where applicable.
 
 ## Verification
 
-<!-- How did you verify this works? Mark all that apply. -->
+- [ ] `npm run check` succeeds (lint, formatting, typecheck, mocked tests and build)
+- [ ] Built MCP smoke succeeds (included in `npm run check`); no tenant credentials needed
+- [ ] `npm run cf:check` succeeds if the Worker or its dependencies changed
+- [ ] Relevant README, usage, contributor or agent docs updated
+- [ ] Live checks, if performed, name the client, upstream version and operations exercised
+- [ ] No credentials, tenant identifiers or private service data committed
 
-- [ ] `npm run lint` clean
-- [ ] `npm run typecheck` clean
-- [ ] `npm test` — `__/__` passing (fill in totals)
-- [ ] `npm run build` clean
-- [ ] Added / updated unit tests (in `src/__tests__/`)
-- [ ] Tested live against a real UniFi controller (cite controller version)
-- [ ] Tested via an LLM-mediated agent (cite agent + model)
-- [ ] Updated `SKILL.md` (if surface changed)
-- [ ] Updated `AGENTS.md` (if architecture / contributor flow changed)
-- [ ] Updated `README.md` (if verification matrix or roadmap changed)
-- [ ] Added entry under `[Unreleased]` in `CHANGELOG.md`
+## Notes for reviewers
 
-## Risk / blast radius
-
-<!-- What breaks if this is wrong? Anything that needs a follow-up
-verification report from a tester? -->
-
-## Out of scope
-
-<!-- Things this PR does NOT do, that a reviewer might wonder about. -->
+Describe compatibility changes and remaining validation. Keep mocked, live and LLM-mediated evidence distinct.

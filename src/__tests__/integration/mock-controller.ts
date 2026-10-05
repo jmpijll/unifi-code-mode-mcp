@@ -59,7 +59,11 @@ export async function startMockController(opts: { apiKey: string }): Promise<Moc
       requests.length = 0;
     },
     async close() {
-      await new Promise<void>((resolve) => server.close(() => { resolve(); }));
+      await new Promise<void>((resolve) =>
+        server.close(() => {
+          resolve();
+        }),
+      );
     },
   };
 }
@@ -137,12 +141,7 @@ async function handle(
   }
 }
 
-function handleProtect(
-  method: string,
-  apiPath: string,
-  body: unknown,
-  res: ServerResponse,
-): void {
+function handleProtect(method: string, apiPath: string, body: unknown, res: ServerResponse): void {
   const route = `${method} ${stripQuery(apiPath)}`;
   switch (route) {
     case 'GET /v1/meta/info':

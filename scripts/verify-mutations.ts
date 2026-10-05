@@ -45,8 +45,7 @@ import { loadProtectSpec } from '../src/spec/loader.js';
 import { ExecuteExecutor } from '../src/sandbox/execute-executor.js';
 import { buildContextFromEnv } from '../src/tenant/context.js';
 
-const OP_LOCAL_REF =
-  process.env['OP_LOCAL_REF'] ?? 'op://AI Agents/Unifi local api key/password';
+const OP_LOCAL_REF = process.env['OP_LOCAL_REF'] ?? 'op://AI Agents/Unifi local api key/password';
 const TEST_PREFIX = 'MCP-VERIFY-';
 
 function requireCameraId(): string {
@@ -114,18 +113,20 @@ async function main(): Promise<void> {
   `);
   if (!preResult.ok) throw new Error(`pre-flight read failed: ${preResult.error ?? 'unknown'}`);
   const original = preResult.data as CameraSnapshot;
-  console.error(`[verify-mutations] PRE  : id=${original.id} name="${original.name}" state=${original.state}`);
+  console.error(
+    `[verify-mutations] PRE  : id=${original.id} name="${original.name}" state=${original.state}`,
+  );
 
   if (original.state !== 'DISCONNECTED') {
     throw new Error(
       `aborting: camera is in state ${original.state}, not DISCONNECTED. ` +
-      `This script only mutates DISCONNECTED cameras to ensure no recording or live-feed impact.`,
+        `This script only mutates DISCONNECTED cameras to ensure no recording or live-feed impact.`,
     );
   }
   if (original.name.startsWith(TEST_PREFIX) || original.name.includes('MCP-VERIFY')) {
     throw new Error(
       `aborting: camera name "${original.name}" looks like a leftover from a previous test run. ` +
-      `Manually revert it in the Protect UI before running this script again.`,
+        `Manually revert it in the Protect UI before running this script again.`,
     );
   }
 
@@ -149,19 +150,27 @@ async function main(): Promise<void> {
     ({ patched: { id: patched.id, name: patched.name }, verified: { id: verify.id, name: verify.name, state: verify.state } });
   `);
   if (!mutResult.ok) {
-    console.error(`[verify-mutations] FATAL: mutate phase failed — name should still be "${original.name}". Verify in UI.`);
+    console.error(
+      `[verify-mutations] FATAL: mutate phase failed — name should still be "${original.name}". Verify in UI.`,
+    );
     console.error(`[verify-mutations] error: ${mutResult.error ?? 'unknown'}`);
     process.exit(1);
   }
   const mutData = mutResult.data as { patched: CameraSnapshot; verified: CameraSnapshot };
-  console.error(`[verify-mutations] MID  : name="${mutData.verified.name}" (PATCH echo: "${mutData.patched.name}")`);
+  console.error(
+    `[verify-mutations] MID  : name="${mutData.verified.name}" (PATCH echo: "${mutData.patched.name}")`,
+  );
 
   if (mutData.verified.name !== testName) {
-    console.error(`[verify-mutations] WARN : verify GET returned "${mutData.verified.name}" but expected "${testName}". Continuing to revert.`);
+    console.error(
+      `[verify-mutations] WARN : verify GET returned "${mutData.verified.name}" but expected "${testName}". Continuing to revert.`,
+    );
   }
 
   // Phase 3 — revert (regardless of whether mutate fully succeeded)
-  console.error(`[verify-mutations] REVERT: PATCH /v1/cameras/${cameraId} name -> "${original.name}" (original)`);
+  console.error(
+    `[verify-mutations] REVERT: PATCH /v1/cameras/${cameraId} name -> "${original.name}" (original)`,
+  );
   const revExec = new ExecuteExecutor({
     tenant,
     protectSpec,
@@ -178,20 +187,28 @@ async function main(): Promise<void> {
     ({ patched: { id: patched.id, name: patched.name }, verified: { id: verify.id, name: verify.name, state: verify.state } });
   `);
   if (!revResult.ok) {
-    console.error(`[verify-mutations] FATAL: REVERT FAILED. Camera name is currently "${testName}". MANUALLY REVERT IN THE PROTECT UI to "${original.name}".`);
+    console.error(
+      `[verify-mutations] FATAL: REVERT FAILED. Camera name is currently "${testName}". MANUALLY REVERT IN THE PROTECT UI to "${original.name}".`,
+    );
     console.error(`[verify-mutations] error: ${revResult.error ?? 'unknown'}`);
     process.exit(2);
   }
   const revData = revResult.data as { patched: CameraSnapshot; verified: CameraSnapshot };
-  console.error(`[verify-mutations] POST : name="${revData.verified.name}" (PATCH echo: "${revData.patched.name}")`);
+  console.error(
+    `[verify-mutations] POST : name="${revData.verified.name}" (PATCH echo: "${revData.patched.name}")`,
+  );
 
   if (revData.verified.name !== original.name) {
-    console.error(`[verify-mutations] FATAL: revert GET returned "${revData.verified.name}" but expected "${original.name}". MANUAL REVERT REQUIRED.`);
+    console.error(
+      `[verify-mutations] FATAL: revert GET returned "${revData.verified.name}" but expected "${original.name}". MANUAL REVERT REQUIRED.`,
+    );
     process.exit(3);
   }
 
   console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.error('[verify-mutations] ✓ SUCCESS — round-trip complete, camera restored to original name');
+  console.error(
+    '[verify-mutations] ✓ SUCCESS — round-trip complete, camera restored to original name',
+  );
 }
 
 main().catch((err: unknown) => {

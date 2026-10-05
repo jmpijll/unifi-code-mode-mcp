@@ -23,9 +23,7 @@ const SPEC_DOC: OpenApiDocument = {
         operationId: 'listDevices',
         tags: ['Devices'],
         summary: 'List devices',
-        parameters: [
-          { name: 'siteId', in: 'path', required: true, schema: { type: 'string' } },
-        ],
+        parameters: [{ name: 'siteId', in: 'path', required: true, schema: { type: 'string' } }],
       },
     },
   },

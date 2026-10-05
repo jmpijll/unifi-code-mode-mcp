@@ -37,9 +37,7 @@ const SPEC_DOC: OpenApiDocument = {
         operationId: 'createNetwork',
         tags: ['Networks'],
         summary: 'Create a network',
-        parameters: [
-          { name: 'siteId', in: 'path', required: true, schema: { type: 'string' } },
-        ],
+        parameters: [{ name: 'siteId', in: 'path', required: true, schema: { type: 'string' } }],
         requestBody: { required: true, content: { 'application/json': {} } },
       },
     },
@@ -182,9 +180,9 @@ describe('dispatchOperation', () => {
 describe('dispatchRawRequest', () => {
   it('rejects missing path', async () => {
     const client = makeMockClient();
-    await expect(dispatchRawRequest(client, { path: undefined as unknown as string })).rejects.toThrow(
-      /string `path`/,
-    );
+    await expect(
+      dispatchRawRequest(client, { path: undefined as unknown as string }),
+    ).rejects.toThrow(/string `path`/);
   });
 
   it('passes args through to client.request', async () => {
@@ -425,7 +423,9 @@ describe('buildUnifiPrelude', () => {
       exposeLocalProtect: true,
     });
     const localProtectCalls: Array<{ opId: string; argsJson: string }> = [];
-    type SandboxScope = { unifi?: { local: { protect: Record<string, Record<string, (args: unknown) => unknown>> } } };
+    type SandboxScope = {
+      unifi?: { local: { protect: Record<string, Record<string, (args: unknown) => unknown>> } };
+    };
     const fn = new Function(
       '__unifiCallLocal',
       '__unifiRawLocal',
@@ -468,7 +468,13 @@ describe('buildUnifiPrelude', () => {
   it('cloud.network() works at runtime without a cloud Site Manager spec', () => {
     const prelude = buildUnifiPrelude(SPEC, undefined, { exposeCloudNetworkProxy: true });
     const networkProxyCalls: Array<{ consoleId: string; opId: string }> = [];
-    type SandboxScope = { unifi?: { cloud: { network: (id: string) => Record<string, Record<string, (args: unknown) => unknown>> } } };
+    type SandboxScope = {
+      unifi?: {
+        cloud: {
+          network: (id: string) => Record<string, Record<string, (args: unknown) => unknown>>;
+        };
+      };
+    };
     const fn = new Function(
       '__unifiCallLocal',
       '__unifiRawLocal',
@@ -514,7 +520,13 @@ describe('buildUnifiPrelude', () => {
       exposeCloudProtectProxy: true,
     });
     const protectProxyCalls: Array<{ consoleId: string; opId: string }> = [];
-    type SandboxScope = { unifi?: { cloud: { protect: (id: string) => Record<string, Record<string, (args: unknown) => unknown>> } } };
+    type SandboxScope = {
+      unifi?: {
+        cloud: {
+          protect: (id: string) => Record<string, Record<string, (args: unknown) => unknown>>;
+        };
+      };
+    };
     const fn = new Function(
       '__unifiCallLocal',
       '__unifiRawLocal',

@@ -35,8 +35,7 @@ import { loadLocalSpec, loadProtectSpec } from '../src/spec/loader.js';
 import { ExecuteExecutor } from '../src/sandbox/execute-executor.js';
 import { buildContextFromEnv } from '../src/tenant/context.js';
 
-const OP_LOCAL_REF =
-  process.env['OP_LOCAL_REF'] ?? 'op://AI Agents/Unifi local api key/password';
+const OP_LOCAL_REF = process.env['OP_LOCAL_REF'] ?? 'op://AI Agents/Unifi local api key/password';
 
 interface LocalCreds {
   baseUrl: string;
@@ -70,7 +69,11 @@ async function probeNetwork(creds: LocalCreds): Promise<{
 
   const client = createLocalClient(
     { baseUrl: creds.baseUrl, apiKey: creds.apiKey, insecure: creds.insecure },
-    { onWarn: (m) => { console.error(`[local-network][warn] ${m}`); } },
+    {
+      onWarn: (m) => {
+        console.error(`[local-network][warn] ${m}`);
+      },
+    },
   );
   const info = await client.request<Record<string, unknown>>({ method: 'GET', path: '/v1/info' });
   const rawVersion = info.data['applicationVersion'];
@@ -85,7 +88,9 @@ async function probeNetwork(creds: LocalCreds): Promise<{
     apiKey: creds.apiKey,
     insecure: creds.insecure,
     cacheDir: resolve(process.cwd(), 'src/spec/cache'),
-    onWarn: (m) => { console.error(`[local-network][warn] ${m}`); },
+    onWarn: (m) => {
+      console.error(`[local-network][warn] ${m}`);
+    },
   });
   console.error(
     `[local-network] spec=${spec.title} v${spec.version} (${String(spec.operations.length)} ops)`,
@@ -155,7 +160,12 @@ async function probeNetwork(creds: LocalCreds): Promise<{
   );
 
   if (!result.ok) {
-    return { ok: false, error: result.error ?? 'unknown', callsMade: result.callsMade, durationMs: elapsed };
+    return {
+      ok: false,
+      error: result.error ?? 'unknown',
+      callsMade: result.callsMade,
+      durationMs: elapsed,
+    };
   }
 
   const outDir = resolve(process.cwd(), 'out');
@@ -166,7 +176,15 @@ async function probeNetwork(creds: LocalCreds): Promise<{
   console.error(`[local-network] wrote ${outPath}`);
 
   // Brief stdout summary.
-  const data = result.data as { sites: Array<{ name: string; devices: unknown[]; networks: unknown[]; wifi: unknown[]; clientsTotal?: number }> };
+  const data = result.data as {
+    sites: Array<{
+      name: string;
+      devices: unknown[];
+      networks: unknown[];
+      wifi: unknown[];
+      clientsTotal?: number;
+    }>;
+  };
   for (const s of data.sites) {
     console.error(
       `[local-network]   site="${s.name}" devices=${String(s.devices.length)} networks=${String(s.networks.length)} wifi=${String(s.wifi.length)} clients=${String(s.clientsTotal ?? 0)}`,
@@ -200,7 +218,11 @@ async function probeProtect(creds: LocalCreds): Promise<{
   // Up-front probe — Protect may not be installed.
   const client = createLocalProtectClient(
     { baseUrl: creds.baseUrl, apiKey: creds.apiKey, insecure: creds.insecure },
-    { onWarn: (m) => { console.error(`[local-protect][warn] ${m}`); } },
+    {
+      onWarn: (m) => {
+        console.error(`[local-protect][warn] ${m}`);
+      },
+    },
   );
   let appVersion: string;
   try {
@@ -223,7 +245,9 @@ async function probeProtect(creds: LocalCreds): Promise<{
     apiKey: creds.apiKey,
     insecure: creds.insecure,
     cacheDir: resolve(process.cwd(), 'src/spec/cache'),
-    onWarn: (m) => { console.error(`[local-protect][warn] ${m}`); },
+    onWarn: (m) => {
+      console.error(`[local-protect][warn] ${m}`);
+    },
   });
   console.error(
     `[local-protect] spec=${spec.title} v${spec.version} (${String(spec.operations.length)} ops)`,
@@ -281,7 +305,12 @@ async function probeProtect(creds: LocalCreds): Promise<{
   );
 
   if (!result.ok) {
-    return { ok: false, error: result.error ?? 'unknown', callsMade: result.callsMade, durationMs: elapsed };
+    return {
+      ok: false,
+      error: result.error ?? 'unknown',
+      callsMade: result.callsMade,
+      durationMs: elapsed,
+    };
   }
 
   const data = result.data as { meta: unknown; cameraCount: number; cameraSample: unknown[] };
@@ -332,7 +361,9 @@ async function main(): Promise<void> {
   console.error('[discover-local] summary:');
   const n = netResult;
   const p = protectResult;
-  console.error(`  network: ${n.ok ? 'OK' : 'FAIL'}${n.applicationVersion ? ` (Network ${n.applicationVersion})` : ''}`);
+  console.error(
+    `  network: ${n.ok ? 'OK' : 'FAIL'}${n.applicationVersion ? ` (Network ${n.applicationVersion})` : ''}`,
+  );
   console.error(
     `  protect: ${p.ok ? 'OK' : p.skipped ? 'SKIPPED' : 'FAIL'}${p.applicationVersion ? ` (Protect ${p.applicationVersion})` : ''}${typeof p.cameraCount === 'number' ? `, cameras=${String(p.cameraCount)}` : ''}`,
   );

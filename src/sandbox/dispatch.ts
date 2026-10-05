@@ -233,14 +233,20 @@ function buildNamespacePrelude(namespace: 'local' | 'cloud', spec: ProcessedSpec
   const namespaceObj: string[] = [];
   namespaceObj.push(`unifi.${namespace} = (function() {`);
   namespaceObj.push(`  var ns = {`);
-  namespaceObj.push(`    spec: ${JSON.stringify({
-    title: spec.title,
-    version: spec.version,
-    sourceUrl: spec.sourceUrl,
-    operationCount: spec.operations.length,
-  })},`);
-  namespaceObj.push(`    request: function(args) { return ${rawBinding}(JSON.stringify(args || {})); },`);
-  namespaceObj.push(`    callOperation: function(opId, args) { return ${callBinding}(opId, JSON.stringify(args || {})); }`);
+  namespaceObj.push(
+    `    spec: ${JSON.stringify({
+      title: spec.title,
+      version: spec.version,
+      sourceUrl: spec.sourceUrl,
+      operationCount: spec.operations.length,
+    })},`,
+  );
+  namespaceObj.push(
+    `    request: function(args) { return ${rawBinding}(JSON.stringify(args || {})); },`,
+  );
+  namespaceObj.push(
+    `    callOperation: function(opId, args) { return ${callBinding}(opId, JSON.stringify(args || {})); }`,
+  );
   namespaceObj.push(`  };`);
 
   for (const [tag, ops] of groups) {
@@ -282,12 +288,14 @@ function buildCloudNetworkProxyPrelude(localSpec: ProcessedSpec): string {
   const operationFactoryLines: string[] = [];
   operationFactoryLines.push('  function buildProxyForConsole(consoleId) {');
   operationFactoryLines.push('    var ns = {');
-  operationFactoryLines.push(`      spec: ${JSON.stringify({
-    title: localSpec.title,
-    version: localSpec.version,
-    sourceUrl: localSpec.sourceUrl,
-    operationCount: localSpec.operations.length,
-  })},`);
+  operationFactoryLines.push(
+    `      spec: ${JSON.stringify({
+      title: localSpec.title,
+      version: localSpec.version,
+      sourceUrl: localSpec.sourceUrl,
+      operationCount: localSpec.operations.length,
+    })},`,
+  );
   operationFactoryLines.push('      consoleId: consoleId,');
   operationFactoryLines.push(
     '      request: function(args) { return __unifiRawCloudNetwork(consoleId, JSON.stringify(args || {})); },',
@@ -355,12 +363,14 @@ function buildLocalProtectPrelude(protectSpec: ProcessedSpec): string {
   lines.push('    unifi.local = {};');
   lines.push('  }');
   lines.push('  var protectNs = {');
-  lines.push(`    spec: ${JSON.stringify({
-    title: protectSpec.title,
-    version: protectSpec.version,
-    sourceUrl: protectSpec.sourceUrl,
-    operationCount: protectSpec.operations.length,
-  })},`);
+  lines.push(
+    `    spec: ${JSON.stringify({
+      title: protectSpec.title,
+      version: protectSpec.version,
+      sourceUrl: protectSpec.sourceUrl,
+      operationCount: protectSpec.operations.length,
+    })},`,
+  );
   lines.push(
     '    request: function(args) { return __unifiRawLocalProtect(JSON.stringify(args || {})); },',
   );
@@ -407,12 +417,14 @@ function buildCloudProtectProxyPrelude(protectSpec: ProcessedSpec): string {
   const operationFactoryLines: string[] = [];
   operationFactoryLines.push('  function buildProtectProxyForConsole(consoleId) {');
   operationFactoryLines.push('    var ns = {');
-  operationFactoryLines.push(`      spec: ${JSON.stringify({
-    title: protectSpec.title,
-    version: protectSpec.version,
-    sourceUrl: protectSpec.sourceUrl,
-    operationCount: protectSpec.operations.length,
-  })},`);
+  operationFactoryLines.push(
+    `      spec: ${JSON.stringify({
+      title: protectSpec.title,
+      version: protectSpec.version,
+      sourceUrl: protectSpec.sourceUrl,
+      operationCount: protectSpec.operations.length,
+    })},`,
+  );
   operationFactoryLines.push('      consoleId: consoleId,');
   operationFactoryLines.push(
     '      request: function(args) { return __unifiRawCloudProtect(consoleId, JSON.stringify(args || {})); },',
@@ -464,10 +476,45 @@ function missingNamespacePrelude(namespace: 'local' | 'cloud'): string {
 }
 
 const RESERVED_WORDS = new Set([
-  'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete',
-  'do', 'else', 'enum', 'export', 'extends', 'false', 'finally', 'for', 'function', 'if',
-  'import', 'in', 'instanceof', 'new', 'null', 'return', 'super', 'switch', 'this', 'throw',
-  'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield', 'let', 'static',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'debugger',
+  'default',
+  'delete',
+  'do',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'false',
+  'finally',
+  'for',
+  'function',
+  'if',
+  'import',
+  'in',
+  'instanceof',
+  'new',
+  'null',
+  'return',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typeof',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+  'let',
+  'static',
 ]);
 
 export function sanitizeIdentifier(input: string): string {

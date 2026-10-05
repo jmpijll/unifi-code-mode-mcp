@@ -29,8 +29,7 @@ async function main(): Promise<void> {
   const apiKey = getApiKey();
   const cloudClient = createCloudClient({ baseUrl: 'https://api.ui.com', apiKey });
 
-  const consoleId =
-    process.env['UNIFI_CLOUD_CONSOLE_ID'] ?? (await discoverConsoleId(cloudClient));
+  const consoleId = process.env['UNIFI_CLOUD_CONSOLE_ID'] ?? (await discoverConsoleId(cloudClient));
   if (!consoleId) throw new Error('Could not determine consoleId from /v1/hosts');
   console.error(`[discover] consoleId=${consoleId}`);
 
@@ -128,7 +127,9 @@ async function main(): Promise<void> {
   console.error('[discover] running sandbox traversal …');
   const t0 = Date.now();
   const result = await exec.execute(code);
-  console.error(`[discover] sandbox done in ${String(Date.now() - t0)}ms — ok=${String(result.ok)} calls=${String(result.callsMade)}`);
+  console.error(
+    `[discover] sandbox done in ${String(Date.now() - t0)}ms — ok=${String(result.ok)} calls=${String(result.callsMade)}`,
+  );
 
   if (!result.ok) {
     console.error('[discover] FAILED:', result.error);
@@ -144,7 +145,15 @@ async function main(): Promise<void> {
   console.error(`[discover] wrote ${outPath}`);
 
   // Brief stdout summary.
-  const data = result.data as { sites: Array<{ name: string; devices: unknown[]; networks: unknown[]; wifi: unknown[]; clientsTotal?: number }> };
+  const data = result.data as {
+    sites: Array<{
+      name: string;
+      devices: unknown[];
+      networks: unknown[];
+      wifi: unknown[];
+      clientsTotal?: number;
+    }>;
+  };
   for (const s of data.sites) {
     console.error(
       `[discover]   site="${s.name}" devices=${String(s.devices.length)} networks=${String(s.networks.length)} wifi=${String(s.wifi.length)} clients=${String(s.clientsTotal ?? 0)}`,
@@ -152,7 +161,9 @@ async function main(): Promise<void> {
   }
 }
 
-async function discoverConsoleId(client: ReturnType<typeof createCloudClient>): Promise<string | undefined> {
+async function discoverConsoleId(
+  client: ReturnType<typeof createCloudClient>,
+): Promise<string | undefined> {
   const res = await client.request<{ data?: Array<{ id?: string }> }>({
     method: 'GET',
     path: '/v1/hosts',

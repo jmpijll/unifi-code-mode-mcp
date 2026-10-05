@@ -45,7 +45,10 @@ export interface TenantContext {
 
 export class MissingCredentialsError extends Error {
   override readonly name = 'MissingCredentialsError';
-  constructor(public readonly namespace: 'local' | 'cloud', detail?: string) {
+  constructor(
+    public readonly namespace: 'local' | 'cloud',
+    detail?: string,
+  ) {
     super(
       `No credentials for "${namespace}" namespace. ` +
         (namespace === 'local'

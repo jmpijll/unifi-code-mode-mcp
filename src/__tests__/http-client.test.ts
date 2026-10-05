@@ -10,9 +10,9 @@ import {
 
 describe('substitutePathParams', () => {
   it('replaces placeholders', () => {
-    expect(substitutePathParams('/v1/sites/{siteId}/devices/{deviceId}', { siteId: 'a', deviceId: 'b' })).toBe(
-      '/v1/sites/a/devices/b',
-    );
+    expect(
+      substitutePathParams('/v1/sites/{siteId}/devices/{deviceId}', { siteId: 'a', deviceId: 'b' }),
+    ).toBe('/v1/sites/a/devices/b');
   });
 
   it('encodes special characters', () => {
