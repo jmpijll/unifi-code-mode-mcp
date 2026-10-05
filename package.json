@@ -64,18 +64,18 @@
     "node": ">=22.19.0"
   },
   "devDependencies": {
-    "@cloudflare/codemode": "^0.3.6",
+    "@cloudflare/codemode": "^0.5.3",
     "@cloudflare/workers-types": "^4.20260507.1",
     "@types/node": "^25.9.1",
-    "@typescript-eslint/eslint-plugin": "^8.60.1",
-    "@typescript-eslint/parser": "^8.59.3",
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/parser": "^8.71.0",
     "dotenv": "^17.0.0",
     "eslint": "^8.57.0",
-    "prettier": "^3.4.0",
-    "tsx": "^4.22.4",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
-    "wrangler": "4.105.0"
+    "wrangler": "4.147.0"
   },
   "dependencies": {
     "@apidevtools/json-schema-ref-parser": "^11.7.0",
