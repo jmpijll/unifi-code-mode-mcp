@@ -267,7 +267,7 @@ search index. Bump it on any change to the shape produced by
 
 ## 7. Code style
 
-- TypeScript, strict, ESM. Node 22 and 24.19+ (CI: 22 and 24).
+- TypeScript, strict, ESM. Node 22.19+ (CI: 22 and 24).
 - Match the patterns in
   [`fortimanager-code-mode-mcp`](https://github.com/jmpijll/fortimanager-code-mode-mcp)
   where applicable.
