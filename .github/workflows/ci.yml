@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,9 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [22.x]
+        node-version: [22.x, 24.x]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v6
@@ -24,7 +31,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Lint
         run: npm run lint
@@ -53,3 +60,17 @@ jobs:
           echo "$OUT" | grep -q '"name": "execute"' \
             || (echo "FAIL: 'execute' tool not in tools/list" >&2; exit 1)
           echo "OK: both 'search' and 'execute' tools exposed by dist/index.js"
+
+
+  cf-worker:
+    name: cf-worker build smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx wrangler deploy --dry-run --outdir=.wrangler-out --config cf-worker/wrangler.toml

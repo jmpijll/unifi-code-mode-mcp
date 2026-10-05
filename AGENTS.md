@@ -93,7 +93,7 @@ backed by a sandboxed JS surface that fans out to two separate UniFi APIs.
 ## 3. Daily dev loop
 
 ```bash
-npm install                           # one-time
+npm ci                                # one-time
 npm run typecheck                     # tsc --noEmit
 npm test                              # vitest run (105 cases)
 npm run lint                          # eslint
@@ -101,8 +101,9 @@ npm run format:check                  # prettier
 npm run build                         # tsc → dist/
 ```
 
-Before opening any PR, all five must be green. CI runs the same set on
-Node 22.
+Before opening any PR, lint, typecheck, tests and build must be green. Run
+format:check separately and report existing drift; CI keeps formatting advisory. CI runs the same set on
+Node 22 and 24.
 
 For end-to-end smoke against a real controller (read-only):
 
@@ -266,7 +267,7 @@ search index. Bump it on any change to the shape produced by
 
 ## 7. Code style
 
-- TypeScript, strict, ESM. Node 20+ (CI: 22).
+- TypeScript, strict, ESM. Node 22 and 24.19+ (CI: 22 and 24).
 - Match the patterns in
   [`fortimanager-code-mode-mcp`](https://github.com/jmpijll/fortimanager-code-mode-mcp)
   where applicable.

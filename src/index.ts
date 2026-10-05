@@ -14,6 +14,7 @@
  * lazy and uses the credentials from the request headers.
  */
 
+import { SERVER_VERSION } from './version.js';
 import { loadConfig, type AppConfig } from './config.js';
 import { getQuickJSModule } from './sandbox/executor.js';
 import { loadCloudSpec, loadLocalSpec, loadProtectSpec } from './spec/loader.js';
@@ -86,9 +87,7 @@ async function tryLoadCloudSpec(config: AppConfig): Promise<ProcessedSpec | unde
     );
     return spec;
   } catch (err) {
-    logger.warn(
-      `Failed to load cloud spec: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    logger.warn(`Failed to load cloud spec: ${err instanceof Error ? err.message : String(err)}`);
     return undefined;
   }
 }
@@ -150,7 +149,7 @@ async function main(): Promise<void> {
     limits: { maxCallsPerExecute: config.unifiMaxCallsPerExecute },
     logger,
     name: 'unifi-code-mode-mcp',
-    version: '0.1.0',
+    version: SERVER_VERSION,
   });
 
   if (config.mcpTransport === 'stdio') {

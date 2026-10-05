@@ -28,6 +28,7 @@
  * the Node HTTP transport (see [docs/multi-tenant.md](../docs/multi-tenant.md)).
  */
 
+import packageInfo from '../package.json';
 import { DynamicWorkerExecutor } from '@cloudflare/codemode';
 import { openApiMcpServer, type RequestOptions } from '@cloudflare/codemode/mcp';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -94,7 +95,7 @@ export default {
       spec,
       executor,
       name: `unifi-code-mode-mcp-${namespace}`,
-      version: '0.1.0',
+      version: packageInfo.version,
       request: async (opts: RequestOptions): Promise<unknown> => doRequest(opts, creds, namespace),
     });
 
@@ -126,8 +127,7 @@ function readCreds(request: Request, env: Env, namespace: 'local' | 'cloud'): Cr
   if (namespace === 'local') {
     const baseUrl =
       request.headers.get('x-unifi-local-base-url') ?? env.DEFAULT_LOCAL_BASE_URL ?? '';
-    const apiKey =
-      request.headers.get('x-unifi-local-api-key') ?? env.DEFAULT_LOCAL_API_KEY ?? '';
+    const apiKey = request.headers.get('x-unifi-local-api-key') ?? env.DEFAULT_LOCAL_API_KEY ?? '';
     if (!baseUrl || !apiKey) return undefined;
     return {
       type: 'local',
